@@ -527,7 +527,7 @@
       return true;
     },
     raidTick(game, k, dt) {
-      const r = k.raid, M = game.entities, W = game.world, S = game.settings, P = game.player;
+      const r = k.raid, M = game.entities, S = game.settings, P = game.player;
       r.t += dt;
       const end = (how) => {
         for (const e of M.list) if (e.raid && !e.removed) { if (how === 'retreat' && game.particles) game.particles.poof(e.pos[0], e.pos[1], e.pos[2], e.hw * 2, e.h); if (how === 'retreat') e.removed = true; }

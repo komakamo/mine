@@ -146,9 +146,9 @@ MC.Mesher = class {
         if (sky[i] > 1) { q[tail] = i; tail = (tail + 1) & QM; }
       }
     }
-    tail = this._bfs(sky, head, tail, RT, true);
+    this._bfs(sky, head, tail, RT, true);
     // --- block light
-    head = 0; tail = 0;
+    tail = 0;
     const em = this.emitters, EMIT = MC.B_EMIT;
     for (let k = 0; k < this.numEmitters; k++) {
       const i = em[k];
