@@ -34,13 +34,17 @@
   };
 
   // ---------------------------------------------------------------- site selection
-  function survey(gen, x, z, r, n = 16) {
+  function survey(gen, x, z, r, n = 12) {
     const out = [];
-    for (let a = 0; a < n; a++) { const t = a / n * Math.PI * 2; out.push(hAt(gen, x + Math.round(Math.cos(t) * r), z + Math.round(Math.sin(t) * r))); }
+    for (let a = 0; a < n; a++) {
+      const t = a / n * Math.PI * 2;
+      out.push(hAt(gen, x + Math.round(Math.cos(t) * r), z + Math.round(Math.sin(t) * r)));
+    }
     return out;
   }
   const median = (a) => a.slice().sort((p, q) => p - q)[a.length >> 1];
-  // walk uphill to the local top
+
+  // walk uphill to the local summit
   function climb(gen, x, z, step, n) {
     let h = hAt(gen, x, z);
     for (let i = 0; i < n; i++) {
@@ -55,88 +59,236 @@
     }
     return [x, z, h];
   }
-  // rotation whose local front (-z) looks along the world axis direction with the highest score
-  function frontRot(gen, x, z, r, score) {
-    let best = 0, bs = -Infinity;
-    for (let k = 0; k < 4; k++) {
-      const [dx, dz] = DIR4[k];
-      let s = 0;
-      for (const f of [0.5, 0.75, 1]) for (const o of [-0.3, 0, 0.3]) s += score(hAt(gen, x + Math.round((dx - dz * o) * r * f), z + Math.round((dz + dx * o) * r * f)));
-      if (s > bs) { bs = s; best = k; }
+
+  const HILLY = [BI.PLAINS, BI.FOREST, BI.BIRCH, BI.TAIGA, BI.SNOWY];
+
+  // 1. 海城 (Umijiro): 岬・半島・海側開放度・陸地アプローチ・両翼水堀評価
+  function evalUmijiro(gen, x, z, h0) {
+    if (h0 < SEA || h0 > SEA + 4) return null;
+    const r30 = survey(gen, x, z, 30, 8);
+    const wet30 = r30.filter((h) => h < SEA).length;
+    if (wet30 < 3 || wet30 > 6) return null; // 岬・突端として適度な水陸境界
+
+    let best = null;
+    for (let rot = 0; rot < 4; rot++) {
+      const [dx, dz] = DIR4[rot]; // 陸地側（大手・-z方向）
+
+      // 海側（本丸・+z方向）の開口度
+      let seaWater = 0, seaTotal = 0;
+      for (const f of [18, 36]) {
+        for (const o of [-0.5, 0, 0.5]) {
+          const sx = x - Math.round((dx - dz * o) * f);
+          const sz = z - Math.round((dz + dx * o) * f);
+          if (hAt(gen, sx, sz) < SEA) seaWater++;
+          seaTotal++;
+        }
+      }
+      const seaRatio = seaWater / seaTotal;
+      if (seaRatio < 0.65) continue;
+
+      // 陸地側（二の丸・大手門・-z方向）の安定度
+      let landCount = 0, landTotal = 0;
+      let minLandH = 999, maxLandH = -999;
+      for (const f of [18, 36]) {
+        for (const o of [-0.4, 0, 0.4]) {
+          const lx = x + Math.round((dx - dz * o) * f);
+          const lz = z + Math.round((dz + dx * o) * f);
+          const h = hAt(gen, lx, lz);
+          if (h >= SEA) landCount++;
+          if (h < minLandH) minLandH = h;
+          if (h > maxLandH) maxLandH = h;
+          landTotal++;
+        }
+      }
+      const landRatio = landCount / landTotal;
+      if (landRatio < 0.8) continue;
+      const landSlope = maxLandH - minLandH;
+      if (landSlope > 8) continue; // 背後にそびえる急崖を排除
+
+      // 左右両翼の海域（天然の海堀）
+      let flankWater = 0;
+      for (const o of [-1, 1]) {
+        for (const f of [20, 32]) {
+          const fx = x + Math.round(-dz * o * f);
+          const fz = z + Math.round(dx * o * f);
+          if (hAt(gen, fx, fz) < SEA) flankWater++;
+        }
+      }
+      if (flankWater < 2) continue; // 岬として両翼にも海が回り込んでいること
+
+      const score = 30 + seaRatio * 35 + landRatio * 25 + flankWater * 5 - landSlope * 2;
+      if (!best || score > best.score) {
+        best = { kind: 'umijiro', rot, score, fy: Math.max(SEA + 2, Math.min(SEA + 4, h0)), sx: x, sz: z };
+      }
     }
     return best;
   }
-  const HILLY = [BI.PLAINS, BI.FOREST, BI.BIRCH, BI.TAIGA, BI.SNOWY];
-  function trySite(gen, gx, gz, x, z) {
-    const info = gen.columnInfo(x, z);
-    if (info.biome === BI.DESERT || info.biome === BI.OCEAN) return null;
-    const r24 = survey(gen, x, z, 24), r44 = survey(gen, x, z, 44);
-    const wet = (a) => a.filter((h) => h < SEA - 1).length;
-    let kind = null, sx = x, sz = z, fy = info.h, rot = 0;
-    // 1. coast: land here, open sea on one side
-    if (info.h >= SEA && info.h <= SEA + 5 && wet(r44) >= 4 && wet(r44) <= 10 && wet(r24) <= 5) {
-      rot = frontRot(gen, x, z, 40, (h) => (h >= SEA ? 1 : 0));
+
+  // 2. 山城 (Yamajiro): 山頂卓越度・主尾根降下ライン・両翼急崖（天然切岸）評価
+  function evalYamajiro(gen, x, z, h0, info) {
+    if (info.biome !== BI.MOUNTAIN && h0 < SEA + 30) return null;
+    const [cx, cz, ch] = climb(gen, x, z, 5, 25);
+    if (ch > MC.HEIGHT - 28 || ch < SEA + 30) return null;
+
+    // 山頂の卓越性（周囲に覆いかぶさる高山がないこと）
+    const r40 = survey(gen, cx, cz, 40, 10);
+    if (Math.max(...r40) > ch + 2) return null;
+    const med40 = median(r40);
+    if (ch - med40 < 9) return null; // 四方に対する明瞭な比高
+
+    // 主尾根筋の検出
+    let best = null;
+    for (let rot = 0; rot < 4; rot++) {
+      const [dx, dz] = DIR4[rot]; // 尾根降下方向（大手・-z方向）
+      const h18 = hAt(gen, cx + dx * 18, cz + dz * 18);
+      const h36 = hAt(gen, cx + dx * 36, cz + dz * 36);
+      const h50 = hAt(gen, cx + dx * 50, cz + dz * 50);
+      if (h18 > ch - 1 || h36 > h18 + 2 || h50 > h36 + 2) continue;
+      if (ch - h50 > 24 || ch - h50 < 6) continue; // 三連曲輪に適した緩やかな降下
+
+      // 尾根の左右両翼が険しい急斜面（天然の切岸）であること
+      let flankDrop = 0;
+      for (const o of [-1, 1]) {
+        const hf1 = hAt(gen, cx + Math.round(-dz * o * 18), cz + Math.round(dx * o * 18));
+        const hf2 = hAt(gen, cx + Math.round(dx * 24 - dz * o * 18), cz + Math.round(dz * 24 + dx * o * 18));
+        flankDrop += (ch - hf1) + (h18 - hf2);
+      }
+      const score = 30 + (ch - med40) * 1.5 + flankDrop * 0.5;
+      if (!best || score > best.score) {
+        best = { kind: 'yamajiro', rot, score, fy: ch, sx: cx, sz: cz };
+      }
+    }
+    return best;
+  }
+
+  // 3. 平山城 (Hirayama): 孤立丘陵・頂上平坦度・平野下降勾配評価
+  function evalHirayama(gen, x, z, h0, info) {
+    if (!HILLY.includes(info.biome) || h0 < SEA + 6 || h0 > SEA + 36) return null;
+    const [cx, cz, ch] = climb(gen, x, z, 4, 12);
+    if (ch < SEA + 8 || ch > SEA + 42) return null;
+
+    const r20 = survey(gen, cx, cz, 20, 8);
+    const r44 = survey(gen, cx, cz, 44, 10);
+    const sDiff = Math.max(...r20) - Math.min(...r20);
+    if (sDiff > 5) return null; // 本丸を置く山頂部の適度な平坦さ
+
+    const med44 = median(r44);
+    const rel = ch - med44;
+    if (rel < 6 || rel > 22) return null; // 平野から際立つ孤立丘の高さ
+    if (Math.max(...r44) > ch) return null;
+    if (r44.filter((h) => h < SEA).length > 2) return null; // 海に囲まれた山は除外
+
+    // 大手側（-z方向）への自然な下降勾配
+    let best = null;
+    for (let rot = 0; rot < 4; rot++) {
       const [dx, dz] = DIR4[rot];
-      if (hAt(gen, x - dx * 28, z - dz * 28) < SEA - 2 && hAt(gen, x + dx * 30, z + dz * 30) >= SEA) { kind = 'umijiro'; fy = SEA + 2; }
-    }
-    // 2. mountain summit
-    if (!kind && (info.biome === BI.MOUNTAIN || info.h >= SEA + 34)) {
-      const [cx, cz, ch] = climb(gen, x, z, 5, 40);
-      if (ch <= MC.HEIGHT - 28 && ch >= SEA + 30 && ch - median(survey(gen, cx, cz, 36)) >= 10 && ch - median(survey(gen, cx, cz, 24)) <= 48) {
-        // the castle runs down the gentlest ridge — one that really descends (not up to a higher peak)
-        rot = frontRot(gen, cx, cz, 48, (h) => (h <= ch - 6 ? h : -1000));
-        const [dx, dz] = DIR4[rot];
-        let ok = true;
-        for (const d of [30, 40, 50, 60]) if (hAt(gen, cx + dx * d, cz + dz * d) > ch - 8) ok = false;
-        if (ok) { kind = 'yamajiro'; sx = cx; sz = cz; fy = ch; }
+      const hDown = hAt(gen, cx + dx * 44, cz + dz * 44);
+      const hBack = hAt(gen, cx - dx * 30, cz - dz * 30);
+      if (hDown >= ch - 2) continue;
+      const slope = (ch - hDown) - Math.abs(ch - hBack);
+      const score = 30 + rel * 2.5 + slope * 1.5 - sDiff * 2;
+      if (!best || score > best.score) {
+        best = { kind: 'hirayama', rot, score, fy: ch, sx: cx, sz: cz };
       }
     }
-    // 3. hill
-    if (!kind && HILLY.includes(info.biome)) {
-      // a real hill: lower ground all round (the lower enclosures step down towards the lowest side)
-      const [cx, cz, ch] = climb(gen, x, z, 4, 12);
-      const r40 = survey(gen, cx, cz, 40), med = median(r40), rel = ch - med;
-      if (rel >= 6 && rel <= 26 && ch <= SEA + 56 && med >= SEA + 1 && Math.max(...r40) <= ch && median(survey(gen, cx, cz, 58)) <= ch - 5 &&
-        wet(survey(gen, cx, cz, 50)) === 0) {
-        kind = 'hirayama'; sx = cx; sz = cz; fy = ch; rot = frontRot(gen, cx, cz, 44, (h) => -h);
-      }
-    }
-    // 4. flat land
-    if (!kind) {
-      const all = r24.concat(r44, survey(gen, x, z, 62)), lo = Math.min(...all), hi = Math.max(...all);
-      if (info.biome === BI.PLAINS && hi - lo <= 13 && lo >= SEA && info.h >= SEA + 2 && info.h <= SEA + 32) { kind = 'hirajiro'; fy = median(all); }
-      else if (info.biome !== BI.PLAINS && HILLY.includes(info.biome)) {
-        const small = r24.concat(survey(gen, x, z, 36)), l2 = Math.min(...small), h2 = Math.max(...small);
-        if (h2 - l2 <= 8 && l2 >= SEA && info.h >= SEA + 2) { kind = 'toride'; fy = median(small); }
-      }
-      rot = Math.floor(MC.hash2(gx, gz, gen.seed + 7107) * 4);
-    }
-    if (!kind) return null;
+    return best;
+  }
+
+  // 4. 平城 (Hirajiro): 広域平坦度（diff<=8）・平野純度・水系近接度評価
+  function evalHirajiro(gen, x, z, h0, info) {
+    if (info.biome !== BI.PLAINS || h0 < SEA + 2 || h0 > SEA + 28) return null;
+    const r24 = survey(gen, x, z, 24, 8);
+    const r44 = survey(gen, x, z, 44, 8);
+    const r60 = survey(gen, x, z, 60, 8);
+    const all = r24.concat(r44, r60);
+    const lo = Math.min(...all), hi = Math.max(...all);
+    const diff = hi - lo;
+    if (diff > 8 || lo < SEA) return null; // 二重水堀が平地と完全に調和する平坦地
+
+    const r80 = survey(gen, x, z, 76, 8);
+    const nearWater = r80.some((h) => h < SEA) ? 10 : 0; // 天然河川・水系の近接ボーナス
+    const score = 55 - diff * 4 + nearWater;
+    const rot = Math.floor(MC.hash2(x, z, gen.seed + 7107) * 4);
+    return { kind: 'hirajiro', rot, score, fy: median(all), sx: x, sz: z };
+  }
+
+  // 5. 砦 (Toride): 微高地隆起度・見晴らし・戦術的優位度評価
+  function evalToride(gen, x, z, h0, info) {
+    if (!HILLY.includes(info.biome) || h0 < SEA + 3 || h0 > SEA + 46) return null;
+    const r20 = survey(gen, x, z, 20, 8);
+    const r32 = survey(gen, x, z, 32, 8);
+    const med32 = median(r32);
+    const knollRise = h0 - med32;
+    if (knollRise < 1.5 || knollRise > 6) return null; // 周囲を見下ろす微高地・マウンド
+    const diff = Math.max(...r20) - Math.min(...r20);
+    if (diff > 4) return null;
+
+    const score = 25 + knollRise * 4 - diff * 2;
+    const rot = Math.floor(MC.hash2(x, z, gen.seed + 7107) * 4);
+    return { kind: 'toride', rot, score, fy: h0, sx: x, sz: z };
+  }
+
+  function validLocation(gen, kind, sx, sz) {
     const T = TYPES[kind];
-    // keep away from the medieval castles (and any kingdom founded there) and from villages
     for (const [cgx, cgz] of Str._cellsAround(sx, sz, Str.CCELL, 270)) {
       const c = Str.castleSite(gen, cgx, cgz);
-      if (c && Math.hypot(c.x - sx, c.z - sz) < 260) return null;
+      if (c && Math.hypot(c.x - sx, c.z - sz) < 260) return false;
     }
     for (const [vgx, vgz] of Str._cellsAround(sx, sz, Str.VCELL, T.R + 110)) {
       const v = Str.villageSite(gen, vgx, vgz);
-      if (v && Math.hypot(v.x - sx, v.z - sz) < T.R + 90) return null;
+      if (v && Math.hypot(v.x - sx, v.z - sz) < T.R + 90) return false;
     }
-    const snowy = info.biome === BI.SNOWY || info.biome === BI.TAIGA || (kind === 'yamajiro' && fy > 150);
-    return { type: 'wajo', kind, gx, gz, x: sx, z: sz, fy, rot, R: T.R, id: 'w' + gx + ',' + gz, name: T.name, snowy };
+    return true;
   }
+
+  function trySite(gen, gx, gz, x, z) {
+    const info = gen.columnInfo(x, z);
+    if (info.biome === BI.DESERT || info.biome === BI.OCEAN) return null;
+    const h0 = info.h;
+
+    const candidates = [];
+    const u = evalUmijiro(gen, x, z, h0); if (u) candidates.push(u);
+    const y = evalYamajiro(gen, x, z, h0, info); if (y) candidates.push(y);
+    const h = evalHirayama(gen, x, z, h0, info); if (h) candidates.push(h);
+    const p = evalHirajiro(gen, x, z, h0, info); if (p) candidates.push(p);
+    const t = evalToride(gen, x, z, h0, info); if (t) candidates.push(t);
+    if (!candidates.length) return null;
+
+    const PRIO_MULT = { umijiro: 1.05, hirajiro: 1.15, hirayama: 1.05, yamajiro: 1.0, toride: 0.85 };
+    candidates.sort((a, b) => (b.score * PRIO_MULT[b.kind]) - (a.score * PRIO_MULT[a.kind]));
+    for (const best of candidates) {
+      if (!validLocation(gen, best.kind, best.sx, best.sz)) continue;
+      const T = TYPES[best.kind];
+      const snowy = info.biome === BI.SNOWY || info.biome === BI.TAIGA || (best.kind === 'yamajiro' && best.fy > 150);
+      return {
+        type: 'wajo', kind: best.kind, gx, gz,
+        x: best.sx, z: best.sz, fy: best.fy, rot: best.rot,
+        R: T.R, id: 'w' + gx + ',' + gz, name: T.name, snowy, score: best.score
+      };
+    }
+    return null;
+  }
+
   function wajoSite(gen, gx, gz) {
     const k = 'w' + gx + ',' + gz;
     if (Str._sites.has(k)) return Str._sites.get(k);
     let site = null;
     if (MC.hash2(gx, gz, gen.seed + 7101) < 0.9) {
-      // several candidate spots per cell; the rarer kinds of land win (plains castles would otherwise be scarce)
-      const PRIO = { hirajiro: 5, umijiro: 4, toride: 3, hirayama: 2, yamajiro: 1 };
-      for (let t = 0; t < 6; t++) {
-        const x = gx * WCELL + 84 + Math.floor(MC.hash2(gx * 7 + t, gz, gen.seed + 7102) * (WCELL - 168));
-        const z = gz * WCELL + 84 + Math.floor(MC.hash2(gx, gz * 7 + t, gen.seed + 7103) * (WCELL - 168));
-        const s = trySite(gen, gx, gz, x, z);
-        if (s && (!site || PRIO[s.kind] > PRIO[site.kind])) site = s;
+      const candidates = [];
+      for (let tz = 0; tz < 3; tz++) {
+        for (let tx = 0; tx < 3; tx++) {
+          const rx = Math.floor(MC.hash2(gx * 11 + tx, gz * 13 + tz, gen.seed + 7102) * 28) - 14;
+          const rz = Math.floor(MC.hash2(gx * 17 + tx, gz * 19 + tz, gen.seed + 7103) * 28) - 14;
+          const x = gx * WCELL + 68 + tx * 100 + rx;
+          const z = gz * WCELL + 68 + tz * 100 + rz;
+          const s = trySite(gen, gx, gz, x, z);
+          if (s) candidates.push(s);
+        }
+      }
+      if (candidates.length) {
+        const PRIO_MULT = { umijiro: 1.05, hirajiro: 1.15, hirayama: 1.05, yamajiro: 1.0, toride: 0.85 };
+        candidates.sort((a, b) => (b.score * PRIO_MULT[b.kind]) - (a.score * PRIO_MULT[a.kind]));
+        site = candidates[0];
       }
     }
     Str._sites.set(k, site);
@@ -719,7 +871,7 @@
       // dry moat in front of the lowest terrace
       const EXT = 74;
       const sdAll = (x, z) => Math.min(rectSd(O[0] - 3, O[1] - 3, O[2] + 3, O[3] + 3)(x, z), rectSd(S3[0] - 3, S3[1] - 8, S3[2] + 3, S3[3])(x, z));
-      apron(b, site, -EXT, -EXT, EXT, EXT, baseS + 1, (x, z) => (sdAll(x, z) - 2) / 16, (x, z) => sdAll(x, z) <= 0, ST - 2);
+      apron(b, site, -EXT, -EXT, EXT, EXT, baseS + 1, (x, z) => (sdAll(x, z) - 2) / 20, (x, z) => sdAll(x, z) <= 0, ST - 2);
       const air = (y) => (y > baseS ? 0 : -1);
       // 空堀 in front of the sannomaru, an earthen causeway (土橋) left standing at the gate
       for (let z = S3[1] - 8; z <= S3[1] - 3; z++) for (let x = S3[0] - 3; x <= S3[2] + 3; x++) {
@@ -792,11 +944,10 @@
     // ============================================================ 山城: terraces down a mountain ridge
     yamajiro(b, ctx, site) {
       const B = BL(), m = KAYA();
-      // the needle of the summit is shaved flat (削平) down to where the ridge is broad enough for the honmaru;
-      // the lower enclosures follow the ridge down (clamped to a few blocks below the one above)
-      const ringMed = (r) => { const a = []; for (let k = 0; k < 12; k++) { const t = k / 12 * Math.PI * 2; a.push(b.nat(Math.round(Math.cos(t) * r), Math.round(Math.sin(t) * r))); } return a.sort((p, q) => p - q)[6]; };
-      const T1 = MC.clamp(ringMed(7) + 2, site.fy - 12, site.fy - 1);
-      const T2 = MC.clamp(b.nat(0, -18), T1 - 8, T1 - 4), T3 = MC.clamp(b.nat(0, -36), T2 - 8, T2 - 4);
+      // 山頂の主峰を本丸（T1）とし、尾根筋の実際の標高に沿って二の丸（T2）、三の丸（T3）を段状に連ねる（連郭式）
+      const T1 = site.fy;
+      const T2 = MC.clamp(Math.round(b.nat(0, -18)), T1 - 7, T1 - 3);
+      const T3 = MC.clamp(Math.round(b.nat(0, -36)), T2 - 7, T2 - 3);
       const K1 = [-8, -7, 8, 7], K2 = [-7, -24, 7, -13], K3 = [-8, -42, 8, -30];
       const surf = site.snowy ? B.snowy_grass : B.grass;
       const kuruwa = [[K1, T1], [K2, T2], [K3, T3]];
@@ -824,7 +975,7 @@
         ground(b, x, z, h, bare ? (MC.hash2(x, z, 4404) < 0.2 ? B.gravel : B.stone) : surf, { clear: inside ? 10 : 6, sub: bare ? B.stone : undefined });
       }
       const th = (x, z) => { const v = TH.get(key(x, z)); return v === undefined ? b.nat(x, z) : v; };
-      // 堀切: trenches cut across the ridge; beyond it 竪堀 grooves run down both flanks
+      // 堀切: 尾根を直角に断ち切る空堀溝。両翼の竪堀と一体化
       const trench = (z0, z1, bottom) => {
         for (let z = z0; z <= z1; z++) for (let x = -30; x <= 30; x++) {
           const t = th(x, z);
@@ -832,20 +983,20 @@
           else if (z > z0 && z < z1) { for (let y = t - 2; y <= t + 2; y++) b.put(x, y, z, y === t - 2 ? B.dirt : 0); }
         }
       };
-      trench(-12, -10, T2 - 5);
-      trench(-29, -27, T3 - 5);
-      // bridges over the trenches, steps up into the higher enclosure (虎口) and its gate
-      bridge(b, 0, -13, -9, T2, T2 - 5);
+      trench(-12, -10, T2 - 4);
+      trench(-29, -27, T3 - 4);
+      // 堀切を渡る木橋、高位曲輪（虎口）へ登る木階段
+      bridge(b, 0, -13, -9, T2, T2 - 4);
       stepsUp(b, -1, 1, -8, 1, T2, T1 - T2, B.spruce_stairs, B.dirt, { land: 1, top: B.dirt_path });
-      bridge(b, 0, -30, -26, T3, T3 - 5);
+      bridge(b, 0, -30, -26, T3, T3 - 4);
       stepsUp(b, -1, 1, -25, 1, T3, T2 - T3, B.spruce_stairs, B.dirt, { land: 1, top: B.dirt_path });
-      // 大手道: an earthen ramp down the ridge from the sannomaru gate, cut through any rise (切通し)
-      for (let k = 1, y = T3; k <= 40; k++) {
+      // 大手道: 三の丸冠木門から尾根の背骨に沿って滑らかに降下する切通しの土坂・石段
+      for (let k = 1, y = T3; k <= 44; k++) {
         const z = K3[1] - k, nh = Math.max(b.nat(-1, z), b.nat(0, z), b.nat(1, z));
         const cut = nh >= y;
         if (!cut) y = Math.max(y - 1, nh);
         for (let dx = -1; dx <= 1; dx++) ground(b, dx, z, y, B.dirt_path, { clear: 4 });
-        if (!cut && y <= nh) break;
+        if (!cut && y <= nh && k > 12) break;
       }
       // ---- palisades and gates
       const edge = (R, skip) => perimeter(...R).filter(([x, z]) => !skip(x, z));
@@ -888,19 +1039,40 @@
     // ============================================================ 海城: the sea as the moat
     umijiro(b, ctx, site) {
       const B = BL(), m = DOGAWARA(), rnd = ctx.rnd;
-      const WL = SEA - 1, MB = SEA - 6, NT = SEA + 2, HT = SEA + 7;
+      const WL = SEA - 1, MB = SEA - 6;
+      const NT = Math.max(SEA + 2, site.fy || (SEA + 2)), HT = NT + 5;
       const H = [-14, 0, 14, 26], N2 = [-30, -34, 30, -12], WQ = [-24, -11, 24, 36];
       const G = site.snowy ? B.snowy_grass : B.grass;
-      // shore levelled around the ninomaru, water all round the honmaru (the sea behind)
+
+      // 陸地側（二の丸）周辺の地盤を整地し、後方本土へ滑らかにブレンド
       const sdN = rectSd(N2[0] - 4, N2[1] - 6, N2[2] + 4, N2[3]);
-      apron(b, site, -56, -58, 56, -8, NT, (x, z) => (sdN(x, z) - 1) / 14, (x, z) => sdN(x, z) <= 0 || rectSd(...WQ)(x, z) <= 0);
+      apron(b, site, -56, -60, 56, -8, NT, (x, z) => (sdN(x, z) - 1) / 16, (x, z) => sdN(x, z) <= 0 || rectSd(...WQ)(x, z) <= 0);
       for (let z = N2[1] - 6; z <= N2[3]; z++) for (let x = N2[0] - 4; x <= N2[2] + 4; x++) ground(b, x, z, NT, G);
-      for (let z = WQ[1]; z <= WQ[3]; z++) for (let x = WQ[0]; x <= WQ[2]; x++) moatCol(b, x, z, MB, WL);
+
+      // 本丸と二の丸の間の海水堀（canal）：海面高さ（WL = SEA - 1）で東西の外海へ自然に貫通
+      for (let z = -11; z <= -1; z++) for (let x = -24; x <= 24; x++) moatCol(b, x, z, MB, WL);
+
+      // 本丸外周（海域）：強引な四角い掘削をやめ、自然な海底深度を保ちつつ石垣裾部に捨石（根固め石）を配置
+      for (let z = 0; z <= 36; z++) for (let x = -24; x <= 24; x++) {
+        if (rectSd(...H)(x, z) <= 0) continue;
+        const nh = b.nat(x, z);
+        if (nh >= SEA) {
+          moatCol(b, x, z, MB, WL, B.sand);
+        } else {
+          const dH = rectSd(...H)(x, z);
+          const bed = Math.min(nh, WL - 3);
+          // 石垣の際（dH <= 2）には波浪を防ぐ捨石（cobblestone / gravel）を敷設
+          const bedBlock = dH <= 2 ? (rnd() < 0.35 ? B.mossy_cobblestone : B.cobblestone) : (nh <= WL - 4 ? B.gravel : B.sand);
+          moatCol(b, x, z, bed, WL, bedBlock);
+        }
+      }
+
       const water = (y) => (y <= MB ? -1 : y <= WL ? B.water : 0);
       terrace(b, { box: N2, A: 2, top: NT, base: MB, sd: rectSd(...N2), surf: G, corner: corners(...N2), out: (y, x, z) => (z > N2[3] ? water(y) : -1) });
       terrace(b, { box: H, A: 3, top: HT, base: MB, sd: rectSd(...H), surf: G, corner: corners(...H), out: water });
-      // water gate (水門) and the inner harbour of the honmaru (east)
-      for (let z = 9; z <= 15; z++) for (let x = 7; x <= 18; x++) {
+
+      // 水門（船入）：東側の外海へ向けて開放。石垣水門、木造桟橋、係留杭、船着場を自然に造営
+      for (let z = 9; z <= 15; z++) for (let x = 7; x <= 21; x++) {
         const gate = x >= 13;
         if (gate && (z < 11 || z > 13)) continue;
         for (let y = MB + 1; y <= WL; y++) b.put(x, y, z, B.water);
@@ -912,7 +1084,17 @@
       }
       for (let z = 10; z <= 14; z++) for (let x = 13; x <= 15; x++) b.put(x, WL + 4, z, B.kirishi);
       for (let x = 7; x <= 11; x++) b.put(x, WL + 1, 9, B.spruce_slab);
-      // ---- 二の丸 on the shore: walls, masugata gate, barracks, storehouses
+      // 外海へと伸びる木造桟橋と係留杭
+      for (let x = 15; x <= 22; x++) {
+        b.put(x, WL + 1, 12, B.spruce_slab);
+        if (x % 3 === 0) {
+          b.put(x, WL + 2, 11, B.spruce_fence);
+          b.put(x, WL + 2, 13, B.spruce_fence);
+          for (let y = MB; y <= WL; y++) b.put(x, y, 12, B.spruce_log);
+        }
+      }
+
+      // ---- 二の丸（陸側城郭）: 塀、枡形門、長屋、土蔵
       const skipN = (x, z) => (z === N2[1] && x >= -26 && x <= -12) || (x >= 24 && z <= -28);
       dobei(b, perimeter(...N2).filter(([x, z]) => !skipN(x, z) && z !== N2[3]), NT, { low: B.namako, cap: B.dogawara_slab });
       dobei(b, perimeter(...N2).filter(([x, z]) => z === N2[3] && Math.abs(x) > 2), NT, { low: B.namako, cap: B.dogawara_slab });
@@ -929,10 +1111,12 @@
       for (const x0 of [-20, -12]) { const { f, W, D } = placeRect(b, x0, -20, x0 + 4, -14, 1); kura(f, W, D, NT, { m }); }
       for (let z = -29; z <= -12; z++) for (let x = -1; x <= 1; x++) b.put(x, NT, z, B.gravel);
       for (let z = -29; z <= -27; z++) for (let x = -13; x <= -2; x++) b.put(x, NT, z, B.gravel);
-      // bridge to the honmaru, steps up into its gate
+
+      // 二の丸から本丸へ渡る木橋と石段
       bridge(b, 0, -12, -4, NT, MB);
       stepsUp(b, -2, 2, -3, 1, NT, HT - NT, B.stone_brick_stairs, B.ishigaki, { side: B.kirishi });
       yaguramon(frame(b, 0, 4, 0), HT, { m, wall: B.shikkui, low: B.namako });
+
       // ---- 本丸
       const skipH = (x, z) => (z === H[1] && Math.abs(x) <= 6) || ((Math.abs(x) >= 8) && z >= 20) || (x >= 6 && z >= 8 && z <= 16);
       dobei(b, perimeter(...H).filter(([x, z]) => !skipH(x, z)), HT, { low: B.namako, cap: B.dogawara_slab });
@@ -942,6 +1126,7 @@
       for (const [x, z] of [[-3, 7], [3, 7]]) b.put(x, HT + 1, z, B.toro);
       matsu(b, 4, HT, 4, rnd);
       const t = tenshu(b, ctx, { X0: -5, Z0: 13, X1: 5, Z1: 21, g: HT, n: 3, baseH: 5, m, wall: B.shikkui, low: B.namako, chidori: [[0, [0, 2]], [1, [1, 3]]] });
+
       // ---- garrison
       const g1 = ctx.group('ote', b, -20, NT + 1, -28, 36, 10);
       for (const [x, z, ty] of [[-20, -28, 'ashigaru'], [-21, -25, 'samurai'], [-10, -30, 'teppo_ashigaru'], [-24, -36, 'yumi_ashigaru']]) ctx.mob(g1, b, x, NT + 1, z, ty);
