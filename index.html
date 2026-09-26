@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>ShaderCraft</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --panel: rgba(12, 14, 20, 0.82);
+    --panel-border: rgba(255, 255, 255, 0.12);
+    --accent: #7fd3ff;
+    --text: #e8ecf3;
+    --muted: #9aa4b5;
+    --good: #7ee08a;
+    --bad: #ff8a7a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; color: var(--text);
+    font-family: "Segoe UI", "Yu Gothic UI", "Hiragino Sans", "Meiryo", sans-serif; user-select: none; }
+  canvas#c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; image-rendering: auto; }
+  .hidden { display: none !important; }
+
+  #ui { position: fixed; inset: 0; pointer-events: none; }
+  #crosshair { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; transform: translate(-50%, -50%);
+    mix-blend-mode: difference; }
+  #crosshair::before, #crosshair::after { content: ""; position: absolute; background: #fff; }
+  #crosshair::before { left: 10px; top: 0; width: 2px; height: 22px; }
+  #crosshair::after { left: 0; top: 10px; width: 22px; height: 2px; }
+  #crosshair.entity::before, #crosshair.entity::after { background: #ffb0b0; }
+  #tgt { position: absolute; left: 50%; top: calc(50% + 20px); transform: translateX(-50%); font-size: 12px; text-align: center;
+    text-shadow: 0 1px 2px #000; color: #fff; min-width: 90px; }
+  #tgt .bar { height: 4px; margin-top: 3px; background: rgba(0,0,0,0.5); border-radius: 2px; overflow: hidden; }
+  #tgt .bar i { display: block; height: 100%; background: #e84a4a; }
+
+  #hud { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  #stats { width: 100%; display: flex; justify-content: space-between; align-items: flex-end; padding: 0 2px; }
+  #stats .row { display: flex; gap: 0; }
+  #stats .col { display: flex; flex-direction: column; gap: 2px; }
+  #stats .right { align-items: flex-end; }
+  #stats img { width: 20px; height: 20px; image-rendering: pixelated; margin-right: -2px; filter: drop-shadow(0 1px 1px rgba(0,0,0,0.6)); }
+  #hearts.low img { animation: shake 0.35s infinite; }
+  @keyframes shake { 0% { transform: translateY(0); } 50% { transform: translateY(-2px); } 100% { transform: translateY(0); } }
+  #hotbar { display: flex; gap: 4px; padding: 5px; background: rgba(0,0,0,0.45); border: 1px solid rgba(255,255,255,0.15); border-radius: 6px;
+    backdrop-filter: blur(4px); }
+  .slot { width: 52px; height: 52px; border: 2px solid rgba(255,255,255,0.18); border-radius: 4px; position: relative;
+    display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.04); }
+  .slot img { width: 40px; height: 40px; image-rendering: pixelated; pointer-events: none; }
+  .slot.sel { border-color: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,0.35), 0 0 14px rgba(127,211,255,0.5); }
+  .slot .num { position: absolute; left: 3px; top: 1px; font-size: 10px; color: rgba(255,255,255,0.55); }
+  .slot .cnt { position: absolute; right: 3px; bottom: 0; font-size: 14px; font-weight: 700; color: #fff; text-shadow: 1px 1px 0 #333, 0 0 3px #000; pointer-events: none; }
+  .slot .dur { position: absolute; left: 6px; right: 6px; bottom: 4px; height: 3px; background: #000; pointer-events: none; }
+  .slot .dur i { display: block; height: 100%; background: #6f6; }
+  #blockname { position: absolute; left: 50%; bottom: 128px; transform: translateX(-50%); font-size: 15px;
+    text-shadow: 0 1px 3px #000; opacity: 0; transition: opacity 0.4s; white-space: nowrap; }
+  #blockname.show { opacity: 1; transition: none; }
+  #debug { position: absolute; left: 8px; top: 8px; font: 12px/1.45 Consolas, "Courier New", monospace;
+    background: rgba(0,0,0,0.45); padding: 6px 9px; border-radius: 4px; white-space: pre; }
+  #timeinfo { position: absolute; right: 10px; top: 8px; font-size: 13px; text-shadow: 0 1px 3px #000; color: rgba(255,255,255,0.85); text-align: right; line-height: 1.5; }
+  #underwater, #vignette, #fireov, #sleepfade { position: absolute; inset: 0; pointer-events: none; }
+  #vignette { background: radial-gradient(ellipse at center, rgba(160,0,0,0) 45%, rgba(170,0,0,0.55)); opacity: 0; }
+  #fireov { background: linear-gradient(0deg, rgba(255,120,20,0.55), rgba(255,160,40,0.15) 35%, rgba(0,0,0,0) 60%); opacity: 0; mix-blend-mode: screen; }
+  #fireov.on { opacity: 1; animation: flick 0.18s infinite alternate; }
+  @keyframes flick { from { opacity: 0.75; } to { opacity: 1; } }
+  #sleepfade { background: #000; opacity: 0; transition: opacity 1.2s; }
+  #sleepfade.on { opacity: 1; }
+  #toast { position: absolute; left: 50%; top: 18%; transform: translateX(-50%); font-size: 20px; font-weight: 600; text-shadow: 0 2px 6px #000;
+    opacity: 0; transition: opacity 0.5s; text-align: center; white-space: nowrap; }
+  #toast.show { opacity: 1; transition: none; }
+  #toast small { display: block; font-size: 14px; font-weight: 400; color: #ddd; }
+  #bossbar { position: absolute; left: 50%; top: 44px; transform: translateX(-50%); width: min(440px, 70vw); text-align: center;
+    font-size: 13px; font-weight: 600; text-shadow: 0 1px 3px #000; color: #ffd0e8; }
+  #bossbar .bar { height: 8px; margin-top: 4px; background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.25); border-radius: 4px; overflow: hidden; }
+  #bossbar .bar i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #b01a6a, #ff4fa3); transition: width 0.2s; }
+  #bossbar.lord { color: #ffe0a0; font-size: 14px; }
+  #bossbar.lord .bar { height: 10px; border-color: rgba(255, 210, 127, 0.5); }
+  #bossbar.lord .bar i { background: linear-gradient(90deg, #8a1a0a, #ff7a2a 60%, #ffd27f); }
+  #hearts { flex-wrap: wrap-reverse; max-width: 184px; }
+  #frostov { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.3s;
+    background: radial-gradient(ellipse at center, rgba(160,220,255,0) 50%, rgba(170,225,255,0.5)); }
+  #frostov.on { opacity: 1; }
+  #invname.legend { color: #ffd27f; }
+  #compass { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); display: flex; gap: 14px; font-size: 13px;
+    background: rgba(0,0,0,0.45); padding: 5px 12px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.15); }
+  #compass span { display: inline-flex; align-items: center; gap: 6px; }
+  #compass b { display: inline-block; width: 16px; text-align: center; font-size: 16px; color: #ffd27f; }
+
+  .overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: radial-gradient(ellipse at center, rgba(0,0,0,0.35), rgba(0,0,0,0.7)); z-index: 10; }
+  .panel { background: var(--panel); border: 1px solid var(--panel-border); border-radius: 12px; padding: 22px 26px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5); backdrop-filter: blur(10px); max-height: 94vh; overflow-y: auto; }
+  h1 { margin: 0 0 4px; font-size: 34px; letter-spacing: 1px; font-weight: 700;
+    background: linear-gradient(90deg, #ffd27f, #ff9f6b 40%, #7fd3ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  h2 { margin: 0 0 8px; font-size: 16px; color: var(--accent); font-weight: 600; letter-spacing: 1px; }
+  .sub { color: var(--muted); margin-bottom: 16px; font-size: 13px; }
+  button { font: inherit; color: var(--text); background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 8px; padding: 9px 18px; cursor: pointer; transition: background 0.15s; }
+  button:hover { background: rgba(255,255,255,0.16); }
+  button.primary { background: linear-gradient(180deg, #3d8bd6, #2a6aa8); border-color: #5aa6ec; }
+  button.primary:hover { background: linear-gradient(180deg, #4a98e3, #2f75b8); }
+  button.sel { outline: 2px solid var(--accent); }
+
+  #loading { background: #07090d; flex-direction: column; }
+  #loading .bar { width: 320px; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden; margin-top: 18px; }
+  #loading .bar > div { height: 100%; width: 0; background: linear-gradient(90deg, #ffb070, #7fd3ff); transition: width 0.15s; }
+  #loading .status { margin-top: 10px; color: var(--muted); font-size: 13px; }
+
+  .controls { display: grid; grid-template-columns: auto auto auto auto; gap: 4px 16px; font-size: 12.5px; color: var(--muted); margin: 14px 0 16px; }
+  .controls b { color: var(--text); font-weight: 600; }
+  .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 8px 0 16px; }
+  .mode { text-align: left; padding: 12px 14px; line-height: 1.45; }
+  .mode b { font-size: 16px; display: block; }
+  .mode small { color: var(--muted); }
+  .features { font-size: 12.5px; color: var(--muted); line-height: 1.6; margin-bottom: 12px; }
+  .features b { color: #ffd27f; font-weight: 600; }
+
+  #menu .panel { width: min(680px, 94vw); }
+  .settings { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 22px; margin: 14px 0 18px; }
+  .setting { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+  .setting .row { display: flex; justify-content: space-between; color: var(--muted); }
+  .setting .row span:last-child { color: var(--text); }
+  .setting input[type=range] { width: 100%; accent-color: #5aa6ec; }
+  .setting.check { flex-direction: row; align-items: center; gap: 8px; cursor: pointer; }
+  .setting.check input { accent-color: #5aa6ec; width: 16px; height: 16px; }
+  .section { grid-column: 1 / -1; font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--accent);
+    border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 4px; margin-top: 6px; }
+  .btnrow { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+
+  /* container screens */
+  #screen .panel { display: flex; gap: 20px; align-items: flex-start; max-width: 96vw; }
+  .grid { display: grid; grid-template-columns: repeat(9, 48px); gap: 4px; }
+  .grid .slot, .clist .slot { width: 48px; height: 48px; pointer-events: auto; cursor: pointer; }
+  .grid .slot:hover, .clist .slot:hover { border-color: var(--accent); background: rgba(127,211,255,0.08); }
+  .grid .slot img { width: 36px; height: 36px; }
+  .gap { height: 10px; }
+  .inv-title { font-size: 13px; color: var(--muted); margin: 2px 0 6px; }
+  .side { width: 330px; }
+  .recipes { display: flex; flex-direction: column; gap: 4px; max-height: 60vh; overflow-y: auto; padding-right: 4px; }
+  .recipe { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.03); cursor: pointer; font-size: 12px; pointer-events: auto; }
+  .recipe:hover { border-color: var(--accent); }
+  .recipe.no { opacity: 0.42; cursor: default; }
+  .recipe .out { width: 40px; height: 40px; position: relative; flex: none; }
+  .recipe .out img { width: 36px; height: 36px; image-rendering: pixelated; }
+  .recipe .out .cnt { position: absolute; right: 0; bottom: -2px; font-weight: 700; text-shadow: 1px 1px 0 #333; }
+  .recipe .name { flex: 1; min-width: 0; }
+  .recipe .name div:first-child { font-size: 13px; color: var(--text); }
+  .recipe .ings { display: flex; gap: 6px; flex-wrap: wrap; color: var(--muted); }
+  .recipe .ings span { display: inline-flex; align-items: center; gap: 2px; }
+  .recipe .ings span.miss { color: var(--bad); }
+  .recipe .ings img { width: 16px; height: 16px; image-rendering: pixelated; }
+  .tag { font-size: 10px; padding: 1px 6px; border-radius: 8px; background: rgba(255,210,127,0.15); color: #ffd27f; margin-left: 4px; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 8px; }
+  .tabs button { padding: 5px 12px; font-size: 13px; }
+  .catalog { display: grid; grid-template-columns: repeat(10, 48px); gap: 4px; max-height: 50vh; overflow-y: auto; overflow-x: hidden; padding-right: 10px; }
+  #screen .panel { overflow-x: hidden; }
+  .catalog .slot { width: 48px; height: 48px; cursor: pointer; pointer-events: auto; }
+  .catalog .slot:hover { border-color: var(--accent); }
+  .catalog .slot img { width: 36px; height: 36px; }
+  #invname { color: var(--muted); font-size: 13px; min-height: 18px; margin-top: 6px; }
+  #cursor { position: fixed; width: 44px; height: 44px; pointer-events: none; z-index: 30; transform: translate(-50%, -50%); }
+  #cursor img { width: 40px; height: 40px; image-rendering: pixelated; }
+  #cursor .cnt { position: absolute; right: 0; bottom: 0; font-weight: 700; font-size: 14px; text-shadow: 1px 1px 0 #333, 0 0 3px #000; }
+  .trade { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.04); cursor: pointer; margin-bottom: 5px; pointer-events: auto; }
+  .trade:hover { border-color: var(--accent); }
+  .trade.no { opacity: 0.45; }
+  .trade .it { position: relative; width: 38px; height: 38px; }
+  .trade .it img { width: 34px; height: 34px; image-rendering: pixelated; }
+  .trade .it .cnt { position: absolute; right: -2px; bottom: -3px; font-weight: 700; font-size: 13px; text-shadow: 1px 1px 0 #333; }
+  .trade .arrow { color: var(--muted); font-size: 18px; margin: 0 4px; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 8px; line-height: 1.5; }
+
+  #death { background: radial-gradient(ellipse at center, rgba(90,0,0,0.45), rgba(40,0,0,0.8)); flex-direction: column; }
+  #death h1 { background: none; color: #ff8a7a; font-size: 44px; text-shadow: 0 3px 10px #000; }
+  #death .sub { font-size: 16px; color: #eee; }
+  /* kingdom */
+  #kingdomhud { position: absolute; right: 10px; top: 32px; font-size: 13px; text-align: right; text-shadow: 0 1px 3px #000; color: #ffe6b0; line-height: 1.45; }
+  #kingdomhud .sub { color: rgba(255,255,255,0.78); font-size: 12px; }
+  #kingdomhud .stars { color: #ffd27f; font-size: 11px; }
+  #bossbar.raid { color: #ffc0b0; font-size: 14px; }
+  #bossbar.raid .bar { height: 9px; border-color: rgba(255, 150, 120, 0.45); }
+  #bossbar.raid .bar i { background: linear-gradient(90deg, #5a0a0a, #d8402a 60%, #ff9a60); }
+  .kwrap { width: min(560px, 90vw); }
+  .kwrap.kwide { width: min(780px, 92vw); }
+  .kwrap .tabs { margin-top: 12px; }
+  .khead { display: flex; align-items: center; gap: 12px; }
+  .kflag { width: 18px; height: 34px; border-radius: 3px; box-shadow: 0 0 0 1px rgba(255,255,255,0.35), inset 0 -6px 0 rgba(0,0,0,0.2); flex: none; }
+  .kfield { margin: 12px 0; }
+  .klabel { font-size: 12px; color: var(--accent); letter-spacing: 1px; margin: 12px 0 6px; }
+  .krow { display: flex; gap: 8px; }
+  input.ktext { font: inherit; font-size: 18px; padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.25); background: rgba(0,0,0,0.35);
+    color: var(--text); flex: 1; min-width: 0; user-select: text; outline: none; }
+  input.ktext:focus { border-color: var(--accent); }
+  .swatches { display: flex; gap: 8px; flex-wrap: wrap; }
+  .swatch { width: 34px; height: 34px; border-radius: 7px; border: 2px solid rgba(255,255,255,0.25); cursor: pointer; }
+  .swatch.sel { border-color: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,0.45), 0 0 12px rgba(255,255,255,0.35); }
+  .kcolname { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .kmsg { font-size: 12.5px; background: rgba(255,210,127,0.08); border: 1px solid rgba(255,210,127,0.25); border-radius: 8px; padding: 7px 10px; margin: 8px 0; line-height: 1.55; }
+  .kmsg.bad { background: rgba(255,120,100,0.1); border-color: rgba(255,120,100,0.35); color: #ffc8c0; }
+  .kqueue { display: flex; flex-direction: column; gap: 4px; margin: 6px 0 8px; }
+  .kqrow { display: grid; grid-template-columns: 190px 1fr 44px; align-items: center; gap: 10px; font-size: 12.5px; }
+  .kprog { height: 7px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; }
+  .kprog i { display: block; height: 100%; background: linear-gradient(90deg, #c8902a, #ffe08a); transition: width 0.25s; }
+  .kgrid { display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow-y: auto; padding-right: 6px; }
+  .kbld { display: flex; align-items: center; gap: 10px; padding: 7px 9px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.04); }
+  .kbld.no .ic, .kbld.no .info { opacity: 0.6; }
+  .kbld .ic { width: 40px; height: 40px; flex: none; }
+  .kbld .ic img { width: 40px; height: 40px; image-rendering: pixelated; }
+  .kbld .info { flex: 1; min-width: 0; }
+  .kbld .info b { font-size: 14px; }
+  .kbld .kcount { font-size: 11px; color: var(--muted); margin-left: 4px; }
+  .kbld .info .d { font-size: 12px; color: var(--muted); margin-top: 1px; }
+  .kbld .cost { display: flex; gap: 10px; flex-wrap: wrap; font-size: 12px; margin-top: 3px; }
+  .kbld .cost span { display: inline-flex; align-items: center; gap: 2px; }
+  .kbld .cost span.miss { color: var(--bad); }
+  .kbld .cost img { width: 16px; height: 16px; image-rendering: pixelated; }
+  .kbld button { padding: 7px 12px; font-size: 12.5px; white-space: nowrap; min-width: 110px; }
+  .kbld button:disabled { cursor: default; opacity: 0.75; font-size: 11.5px; }
+  .kstat { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px; }
+  .kstat div { background: rgba(255,255,255,0.05); border-radius: 8px; padding: 7px 10px; font-size: 12.5px; color: var(--muted); }
+  .kstat b { display: block; font-size: 19px; color: #ffe6b0; }
+  .kstat b small { font-size: 12px; color: var(--muted); }
+  .korders { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0; }
+  @media (max-width: 560px) { .korders { grid-template-columns: 1fr; } .kqrow { grid-template-columns: 1fr 1fr 40px; } }
+  #err { position: fixed; left: 50%; top: 40%; transform: translate(-50%,-50%); max-width: 640px; padding: 20px 24px;
+    background: #2a0f12; border: 1px solid #a33; border-radius: 10px; z-index: 50; font-size: 14px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="ui" class="hidden">
+  <div id="underwater"></div>
+  <div id="fireov"></div>
+  <div id="frostov"></div>
+  <div id="vignette"></div>
+  <div id="crosshair"></div>
+  <div id="tgt" class="hidden"><span id="tgtname"></span><div class="bar"><i id="tgthp"></i></div></div>
+  <div id="compass" class="hidden"></div>
+  <div id="bossbar" class="hidden"><span id="bossname"></span><div class="bar"><i id="bosshp"></i></div></div>
+  <div id="toast"></div>
+  <div id="hud">
+    <div id="stats">
+      <div class="col"><div class="row" id="armorbar"></div><div class="row" id="hearts"></div></div>
+      <div class="col right"><div class="row" id="air"></div><div class="row" id="hunger"></div></div>
+    </div>
+    <div id="hotbar"></div>
+  </div>
+  <div id="blockname"></div>
+  <div id="debug" class="hidden"></div>
+  <div id="timeinfo"></div>
+  <div id="kingdomhud" class="hidden"></div>
+  <div id="sleepfade"></div>
+</div>
+
+<div id="loading" class="overlay">
+  <h1>ShaderCraft</h1>
+  <div class="sub">影MOD風シェーダー搭載ボクセルワールド</div>
+  <div class="bar"><div id="loadbar"></div></div>
+  <div class="status" id="loadstatus">初期化中...</div>
+</div>
+
+<div id="start" class="overlay hidden">
+  <div class="panel" style="width:min(700px,95vw)">
+    <h1>ShaderCraft</h1>
+    <div class="sub">リアルタイム影・ボリュメトリックライト・水面反射・大気散乱・雲・ブルーム・TAA</div>
+    <div class="features">
+      <b>王国の建国</b>（城主を倒して城を制圧 → 剣士・弓兵・騎士・農夫・職人が集う王国を築き、敵軍の襲撃から守る） ・ <b>村</b>と村人（交易） ・ <b>地下ダンジョン</b>（スポナー・宝箱） ・ <b>5種類の城</b>（城壁・畑・本丸・地下迷宮・中ボスと城主・伝説の武器） ・
+      <b>5種類の和城</b>（平城・平山城・山城・海城・砦が地形に合わせて建つ。足軽・侍・忍者・落ち武者が守る本丸の「大将の旗印」を倒せば制圧・家宝の刀や甲冑） ・
+      <b>敵モブ</b>（ゾンビ／スケルトン／クモ／クリーパー＋城ごとの魔物） ・ 動物 ・ <b>流れる水と溶岩</b> ・ クラフト／かまど ・ 道具と武器 ・ 空腹と体力 ・ 農業 ・ TNT ・ ベッド ほか
+    </div>
+    <div class="modes">
+      <button class="mode" id="mode-survival"><b>サバイバル</b><small>資源を集めてクラフトし、夜のモンスターから生き延びる</small></button>
+      <button class="mode" id="mode-creative"><b>クリエイティブ</b><small>全ブロック・アイテムが無限に使える。飛行可能・ダメージなし</small></button>
+    </div>
+    <div class="controls">
+      <b>WASD</b><span>移動</span>
+      <b>マウス</b><span>視点操作</span>
+      <b>Space</b><span>ジャンプ（クリエ: 2回で飛行）</span>
+      <b>Shift</b><span>スニーク / 下降</span>
+      <b>R / W 2回</b><span>ダッシュ</span>
+      <b>左クリック</b><span>採掘 / 攻撃（長押し）</span>
+      <b>右クリック</b><span>設置 / 使う / 食べる / 弓</span>
+      <b>ホイール / 1-9</b><span>アイテム選択</span>
+      <b>E</b><span>インベントリ・クラフト</span>
+      <b>Q</b><span>アイテムを捨てる</span>
+      <b>中クリック</b><span>ブロックをピック</span>
+      <b>T / G</b><span>時間を進める / 戻す</span>
+      <b>K</b><span>雨のオン / オフ</span>
+      <b>F1 / F3</b><span>UI非表示 / デバッグ</span>
+      <b>Esc</b><span>メニュー・設定</span>
+      <b>コンパス</b><span>持つと王国・村・ダンジョン・城・和城の方角</span>
+      <b>L</b><span>王国メニュー（建国・状況・兵の指揮）</span>
+    </div>
+    <div class="btnrow"><button class="primary" id="playbtn">クリックしてプレイ</button></div>
+  </div>
+</div>
+
+<div id="menu" class="overlay hidden">
+  <div class="panel">
+    <h1 style="font-size:26px">ポーズ</h1>
+    <div class="settings" id="settings"></div>
+    <div class="btnrow">
+      <button id="newworldbtn">新しいワールド</button>
+      <button id="resetbtn">設定を初期化</button>
+      <button class="primary" id="resumebtn">ゲームに戻る</button>
+    </div>
+  </div>
+</div>
+
+<div id="screen" class="overlay hidden"><div class="panel" id="screenpanel"></div></div>
+<div id="cursor" class="hidden"><img alt=""><span class="cnt"></span></div>
+
+<div id="death" class="overlay hidden">
+  <h1>死んでしまった！</h1>
+  <div class="sub" id="deathmsg"></div>
+  <div class="btnrow" style="justify-content:center;margin-top:12px"><button class="primary" id="respawnbtn">リスポーン</button></div>
+</div>
+
+<script src="js/util.js"></script>
+<script src="js/noise.js"></script>
+<script src="js/blocks.js"></script>
+<script src="js/items.js"></script>
+<script src="js/castlecontent.js"></script>
+<script src="js/kingdomcontent.js"></script>
+<script src="js/wajocontent.js"></script>
+<script src="js/texgen.js"></script>
+<script src="js/textiles.js"></script>
+<script src="js/itemtex.js"></script>
+<script src="js/castletex.js"></script>
+<script src="js/kingdomtex.js"></script>
+<script src="js/wajotex.js"></script>
+<script src="js/castlemodels.js"></script>
+<script src="js/kingdommodels.js"></script>
+<script src="js/wajomodels.js"></script>
+<script src="js/models.js"></script>
+<script src="js/worldgen.js"></script>
+<script src="js/structures.js"></script>
+<script src="js/castles.js"></script>
+<script src="js/wajo.js"></script>
+<script src="js/kingdom.js"></script>
+<script src="js/mesher.js"></script>
+<script src="js/fluids.js"></script>
+<script src="js/world.js"></script>
+<script src="js/physics.js"></script>
+<script src="js/glutil.js"></script>
+<script src="js/sky.js"></script>
+<script src="js/shaders/common.js"></script>
+<script src="js/shaders/terrain.js"></script>
+<script src="js/shaders/deferred.js"></script>
+<script src="js/shaders/water.js"></script>
+<script src="js/shaders/post.js"></script>
+<script src="js/shaders/entity.js"></script>
+<script src="js/hand.js"></script>
+<script src="js/entityrender.js"></script>
+<script src="js/renderer.js"></script>
+<script src="js/renderframe.js"></script>
+<script src="js/particles.js"></script>
+<script src="js/entities.js"></script>
+<script src="js/castlemobs.js"></script>
+<script src="js/wajomobs.js"></script>
+<script src="js/kingdommobs.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/inventory.js"></script>
+<script src="js/player.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/kingdomui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

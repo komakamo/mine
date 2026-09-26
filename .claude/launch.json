@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "shadercraft",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [".claude/nocache_server.py", "8791"],
+      "port": 8791
+    }
+  ]
+}
