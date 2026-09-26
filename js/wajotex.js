@@ -325,6 +325,53 @@
     for (const [x, y] of [[8, 5], [7, 5], [8, 6], [9, 6], [7, 6]]) g.set(x, y, 'w');
     render(c, g, { s: 0x9a1c14, S: 0x5a0e0a, b: [0xf0c848, 0.85, 0.8], M: [0xd8e0ea, 0.95, 0.7, 0.1], E: [0xffffff, 0.95, 0.6, 0.3], d: [0x8a92a0, 0.85, 0.7], w: 0xf4f4f4 }, 0x140a08);
   });
+  def('hakuun_tachi', (c) => {
+    const g = grid(); blade(g, { hamon: true });
+    g.set(14, 4, 'm'); g.set(13, 5, 'm'); g.set(12, 6, 'm');
+    render(c, g, { E: [0xffffff, 0.98, 0.5, 0.7], M: [0xeef4fa, 0.95, 0.5, 0.4], d: [0xa8b8cc, 0.9, 0.6, 0.1], h: [0xffffff, 0.98, 0.3, 0.8], m: [0xd0e8ff, 0.95, 0.3, 0.9],
+      b: [0xf0d060, 0.85, 0.8], g: [0xd4af37, 0.85, 0.8], k: 0xf0f4f8, K: 0x4a6080, p: [0xf0d060, 0.85, 0.8] }, 0x0c1420);
+  });
+  def('gumbai_kinka', (c) => {
+    const g = grid([
+      '.....ggggg......',
+      '....gbbbbbg.....',
+      '...gbbRRRbbg....',
+      '..gbbRRRRRbbg...',
+      '..gbRRRRRRRbg...',
+      '..gbRRRRRRRbg...',
+      '..gbbRRRRRbbg...',
+      '...gbbRRRbbg....',
+      '....gbbbbbg.....',
+      '.....ggggg......',
+      '.......hh.......',
+      '.......hh.......',
+      '.......hh.......',
+      '.......tt.......',
+      '......tttt......',
+      '......tttt......',
+    ]);
+    render(c, g, {
+      g: [0xf0c848, 0.9, 0.85],
+      b: [0x16161a, 0.7, 0.2],
+      R: [0xcc2418, 0.8, 0.4],
+      h: [0x3a2216, 0.5, 0.1],
+      t: [0xe03020, 0.85, 0.4],
+    }, 0x140e0a);
+  });
+  def('namikiri', (c) => {
+    const g = grid(); blade(g, { hamon: true });
+    g.set(13, 5, 'm'); g.set(12, 6, 'm');
+    render(c, g, { E: [0xccffff, 0.95, 0.6, 0.5], M: [0x50a0b8, 0.92, 0.6, 0.3], d: [0x286078, 0.88, 0.6], h: [0x80e0f0, 0.95, 0.4, 0.7], m: [0xa0f0ff, 0.95, 0.3, 0.9],
+      b: [0xd8c060, 0.85, 0.8], g: [0x184050, 0.7, 0.5], k: 0x103048, K: 0x70c0d8, p: [0xd8c060, 0.85, 0.8] }, 0x081820);
+  });
+  def('kuroshio_yari', (c) => {
+    const g = grid();
+    handle(g, 0, 15, 10, 's', 'S');
+    for (const [x, y, ch] of [[10, 5, 'b'], [11, 4, 'b'], [12, 3, 'M'], [13, 2, 'M'], [14, 1, 'E'], [15, 0, 'E'], [11, 2, 'M'], [10, 1, 'E'], [13, 4, 'M'], [14, 5, 'E'],
+      [12, 4, 'd'], [12, 2, 'd'], [11, 3, 'M']]) g.set(x, y, ch);
+    for (const [x, y] of [[8, 5], [7, 5], [8, 6], [9, 6]]) g.set(x, y, 'w');
+    render(c, g, { s: 0x14202c, S: 0x0a1016, b: [0x3a7888, 0.85, 0.8], M: [0x487890, 0.95, 0.7, 0.1], E: [0xa0e0ff, 0.98, 0.6, 0.4], d: [0x204050, 0.85, 0.7], w: 0x40a0c0 }, 0x081018);
+  });
   const gun = (P) => (c) => {
     const g = grid();
     for (let i = 0; i < 11; i++) { g.set(4 + i, 11 - i, 'B'); g.set(5 + i, 11 - i, 'b'); }

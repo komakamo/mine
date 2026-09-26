@@ -85,14 +85,34 @@
       defense: '梯郭式（石垣段・空堀） ・ 重厚切石垣・高石垣 ・ 黒下見板四重天守',
     },
     yamajiro: {
-      tagTitle: '山城（やまじろ）',
-      subtitle: '山頂の尾根に曲輪と堀切を連ねた天然の要塞・茅葺主殿',
-      defense: '連郭式（尾根段・堀切） ・ 竪堀・木柵・見張り櫓 ・ 茅葺主殿',
+      tagTitle: '山城・連郭式（やまじろ）',
+      subtitle: '主尾根に曲輪と堀切を連ねた天然の要塞・黒下見板三重天守',
+      defense: '連郭式（尾根段・堀切） ・ 竪堀・木柵・二の丸長屋 ・ 黒下見板三重天守',
+    },
+    yamajiro_unkai: {
+      tagTitle: '山城・梯郭式（やまじろ）',
+      subtitle: '雲海を見下ろす高石垣の天空城・白漆喰三重天守と渡り櫓',
+      defense: '梯郭式（高石垣段・扇の勾配） ・ 渡り櫓・七曲がり坂 ・ 白漆喰三重天守',
+    },
+    yamajiro_kinka: {
+      tagTitle: '山城・輪郭式（やまじろ）',
+      subtitle: '孤峰山頂に君臨する覇王の巨城・同心円帯曲輪と四重天守',
+      defense: '輪郭式（孤峰帯曲輪・腰曲輪群） ・ 九十九折石段・枡形 ・ 壮麗四重天守',
     },
     umijiro: {
-      tagTitle: '海城（うみじろ）',
-      subtitle: '海を天然の堀とする水城・青銅瓦三重天守と城内水門',
-      defense: '水城式（海水外堀） ・ 海防石垣・水門 ・ 銅瓦三重天守',
+      tagTitle: '海城・岬水門（うみじろ）',
+      subtitle: '海に突出した岬の水城・青銅瓦三重天守と石造水門・船着場',
+      defense: '岬水城式（海水外堀・船入） ・ 海防石垣・桟橋 ・ 青銅瓦三重天守',
+    },
+    umijiro_ukifune: {
+      tagTitle: '海城・砂州浮城（うみじろ）',
+      subtitle: '潮入り堀に浮かぶ水上の白城・波除石垣と雁木・本瓦三重天守',
+      defense: '環水式（潮入り海水堀） ・ 波除石垣・雁木石段・月見櫓 ・ 本瓦三重天守',
+    },
+    umijiro_kuroshio: {
+      tagTitle: '海城・海食崖（うみじろ）',
+      subtitle: '海食断崖上に聳える水軍要塞・海防三重天守と水の手坂',
+      defense: '海崖要塞式（海食絶壁・水の手坂） ・ 隠し船着場・火縄狭間 ・ 海防三重天守',
     },
     toride: {
       tagTitle: '砦（とりで）',
@@ -113,7 +133,7 @@
         <div class="wajo-icon-emblem">🏯</div>
         <div>
           <h2 class="wajo-title">和城の絵図 ― 転移の道標</h2>
-          <div class="wajo-subtitle">大地に築かれし五種の和城を探査。目的の城を選択して城門前へ即座に転移します</div>
+          <div class="wajo-subtitle">大地に築かれし全九種の和城（平城・平山城・山城3種・海城3種・砦）を探査。城門前へ即座に転移します</div>
         </div>
       </div>
       <div class="wajo-player-loc">📍 現在地: X: ${Math.round(p.pos[0])}, Y: ${Math.round(p.pos[1])}, Z: ${Math.round(p.pos[2])}</div>
@@ -123,9 +143,14 @@
     // List container
     const list = el('div', 'wajo-grid');
 
-    // Collect all 5 types
+    // Collect all castle types
     const entries = [];
-    const kinds = ['hirajiro', 'hirayama', 'yamajiro', 'umijiro', 'toride'];
+    const kinds = [
+      'hirajiro', 'hirayama',
+      'yamajiro', 'yamajiro_unkai', 'yamajiro_kinka',
+      'umijiro', 'umijiro_ukifune', 'umijiro_kuroshio',
+      'toride'
+    ];
     for (const kind of kinds) {
       const match = sc.best && sc.best[kind];
       if (match && match.site) {

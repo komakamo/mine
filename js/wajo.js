@@ -25,10 +25,18 @@
       spawn: ['ashigaru', 'ashigaru', 'yumi_ashigaru', 'samurai', 'teppo_ashigaru'] },
     hirayama: { name: '墨染城', kind: '平山城', R: 74, clan: [0.16, 0.16, 0.18], sub: '丘に石垣を重ねた黒い城。天守の最上階にある大将の旗印を倒せば制圧',
       spawn: ['ashigaru', 'samurai', 'yumi_ashigaru', 'samurai', 'teppo_ashigaru'] },
-    yamajiro: { name: '鷹ノ巣城', kind: '山城', R: 72, clan: [0.8, 0.14, 0.1], sub: '尾根に曲輪を連ねた山の要害。本丸の主殿にある大将の旗印を倒せば制圧',
+    yamajiro: { name: '鷹ノ巣城', kind: '山城', R: 72, clan: [0.8, 0.14, 0.1], sub: '尾根に曲輪と堀切を連ねた山の要害。本丸の天守閣にある大将の旗印を倒せば制圧',
       spawn: ['ashigaru', 'ninja', 'yumi_ashigaru', 'ninja', 'samurai'] },
+    yamajiro_unkai: { name: '雲海城', kind: '山城', R: 70, clan: [0.35, 0.55, 0.82], sub: '雲海を見下ろす高石垣の天空城。本丸の天守閣にある大将の旗印を倒せば制圧',
+      spawn: ['samurai', 'yumi_ashigaru', 'ashigaru', 'teppo_ashigaru', 'samurai'] },
+    yamajiro_kinka: { name: '金華城', kind: '山城', R: 68, clan: [0.78, 0.62, 0.15], sub: '孤峰山頂に四重天守を戴く覇王の城。天守の最上階にある大将の旗印を倒せば制圧',
+      spawn: ['samurai', 'samurai', 'teppo_ashigaru', 'yumi_ashigaru', 'hatamoto'] },
     umijiro: { name: '潮見城', kind: '海城', R: 58, clan: [0.1, 0.5, 0.48], sub: '海を堀とする水城。天守の最上階にある大将の旗印を倒せば制圧',
       spawn: ['samurai', 'teppo_ashigaru', 'ashigaru', 'yumi_ashigaru', 'teppo_ashigaru'] },
+    umijiro_ukifune: { name: '浮舟城', kind: '海城', R: 64, clan: [0.2, 0.42, 0.72], sub: '潮入り堀に浮かぶ波除石垣の水城。天守の最上階にある大将の旗印を倒せば制圧',
+      spawn: ['ashigaru', 'yumi_ashigaru', 'samurai', 'teppo_ashigaru', 'samurai'] },
+    umijiro_kuroshio: { name: '黒潮城', kind: '海城', R: 62, clan: [0.12, 0.22, 0.38], sub: '海食断崖の上に聳える水軍の要塞。天守の最上階にある大将の旗印を倒せば制圧',
+      spawn: ['samurai', 'teppo_ashigaru', 'teppo_ashigaru', 'ninja', 'samurai'] },
     toride: { name: '朽木砦', kind: '砦', R: 42, clan: [0.86, 0.86, 0.8], sub: '落ち武者の亡霊が守る打ち捨てられた砦。主殿の大将の旗印を倒せば制圧',
       spawn: ['ochimusha', 'ochimusha', 'ninja', 'ochimusha'] },
   };
@@ -62,12 +70,12 @@
 
   const HILLY = [BI.PLAINS, BI.FOREST, BI.BIRCH, BI.TAIGA, BI.SNOWY];
 
-  // 1. 海城 (Umijiro): 岬・半島・海側開放度・陸地アプローチ・両翼水堀評価
+  // 1. 海城 (Umijiro): 岬・半島・海側開放度・陸地アプローチ・両翼水堀・海崖評価（3種類選定）
   function evalUmijiro(gen, x, z, h0) {
-    if (h0 < SEA || h0 > SEA + 4) return null;
+    if (h0 < SEA || h0 > SEA + 22) return null;
     const r30 = survey(gen, x, z, 30, 8);
     const wet30 = r30.filter((h) => h < SEA).length;
-    if (wet30 < 3 || wet30 > 6) return null; // 岬・突端として適度な水陸境界
+    if (wet30 < 2 || wet30 > 6) return null; // 岬・海岸・海崖として適度な水陸境界
 
     let best = null;
     for (let rot = 0; rot < 4; rot++) {
@@ -84,7 +92,7 @@
         }
       }
       const seaRatio = seaWater / seaTotal;
-      if (seaRatio < 0.65) continue;
+      if (seaRatio < 0.6) continue;
 
       // 陸地側（二の丸・大手門・-z方向）の安定度
       let landCount = 0, landTotal = 0;
@@ -101,9 +109,9 @@
         }
       }
       const landRatio = landCount / landTotal;
-      if (landRatio < 0.8) continue;
+      if (landRatio < 0.75) continue;
       const landSlope = maxLandH - minLandH;
-      if (landSlope > 8) continue; // 背後にそびえる急崖を排除
+      if (landSlope > 14) continue;
 
       // 左右両翼の海域（天然の海堀）
       let flankWater = 0;
@@ -114,17 +122,31 @@
           if (hAt(gen, fx, fz) < SEA) flankWater++;
         }
       }
-      if (flankWater < 2) continue; // 岬として両翼にも海が回り込んでいること
+      if (flankWater < 1) continue;
 
-      const score = 30 + seaRatio * 35 + landRatio * 25 + flankWater * 5 - landSlope * 2;
+      const score = 30 + seaRatio * 35 + landRatio * 25 + flankWater * 5 - landSlope * 1.5;
       if (!best || score > best.score) {
-        best = { kind: 'umijiro', rot, score, fy: Math.max(SEA + 2, Math.min(SEA + 4, h0)), sx: x, sz: z };
+        let kind = 'umijiro';
+        let fy = Math.max(SEA + 2, Math.min(SEA + 4, h0));
+        const uhash = Math.floor(MC.hash2(x * 19, z * 31, gen.seed + 6013) * 3);
+        if (h0 >= SEA + 6) {
+          kind = 'umijiro_kuroshio';
+          fy = h0;
+        } else if (uhash === 1) {
+          kind = 'umijiro_ukifune';
+        } else if (uhash === 2) {
+          kind = 'umijiro_kuroshio';
+          fy = Math.max(SEA + 8, h0 + 6);
+        } else {
+          kind = 'umijiro';
+        }
+        best = { kind, rot, score, fy, sx: x, sz: z };
       }
     }
     return best;
   }
 
-  // 2. 山城 (Yamajiro): 山頂卓越度・主尾根降下ライン・両翼急崖（天然切岸）評価
+  // 2. 山城 (Yamajiro): 山頂卓越度・主尾根降下ライン・両翼急崖（天然切岸）評価（3種類選定）
   function evalYamajiro(gen, x, z, h0, info) {
     if (info.biome !== BI.MOUNTAIN && h0 < SEA + 30) return null;
     const [cx, cz, ch] = climb(gen, x, z, 5, 25);
@@ -155,7 +177,12 @@
       }
       const score = 30 + (ch - med40) * 1.5 + flankDrop * 0.5;
       if (!best || score > best.score) {
-        best = { kind: 'yamajiro', rot, score, fy: ch, sx: cx, sz: cz };
+        const yhash = Math.floor(MC.hash2(cx * 37, cz * 43, gen.seed + 7019) * 3);
+        let kind = 'yamajiro';
+        if (flankDrop > 28 && yhash === 1) kind = 'yamajiro_unkai';
+        else if (ch - med40 >= 14 && yhash === 2) kind = 'yamajiro_kinka';
+        else kind = ['yamajiro', 'yamajiro_unkai', 'yamajiro_kinka'][yhash];
+        best = { kind, rot, score, fy: ch, sx: cx, sz: cz };
       }
     }
     return best;
@@ -241,6 +268,13 @@
     return true;
   }
 
+  const PRIO_MULT = {
+    umijiro: 1.05, umijiro_ukifune: 1.05, umijiro_kuroshio: 1.05,
+    hirajiro: 1.15, hirayama: 1.05,
+    yamajiro: 1.0, yamajiro_unkai: 1.0, yamajiro_kinka: 1.0,
+    toride: 0.85
+  };
+
   function trySite(gen, gx, gz, x, z) {
     const info = gen.columnInfo(x, z);
     if (info.biome === BI.DESERT || info.biome === BI.OCEAN) return null;
@@ -254,12 +288,11 @@
     const t = evalToride(gen, x, z, h0, info); if (t) candidates.push(t);
     if (!candidates.length) return null;
 
-    const PRIO_MULT = { umijiro: 1.05, hirajiro: 1.15, hirayama: 1.05, yamajiro: 1.0, toride: 0.85 };
     candidates.sort((a, b) => (b.score * PRIO_MULT[b.kind]) - (a.score * PRIO_MULT[a.kind]));
     for (const best of candidates) {
       if (!validLocation(gen, best.kind, best.sx, best.sz)) continue;
       const T = TYPES[best.kind];
-      const snowy = info.biome === BI.SNOWY || info.biome === BI.TAIGA || (best.kind === 'yamajiro' && best.fy > 150);
+      const snowy = info.biome === BI.SNOWY || info.biome === BI.TAIGA || (best.kind.startsWith('yamajiro') && best.fy > 150);
       return {
         type: 'wajo', kind: best.kind, gx, gz,
         x: best.sx, z: best.sz, fy: best.fy, rot: best.rot,
@@ -286,7 +319,6 @@
         }
       }
       if (candidates.length) {
-        const PRIO_MULT = { umijiro: 1.05, hirajiro: 1.15, hirayama: 1.05, yamajiro: 1.0, toride: 0.85 };
         candidates.sort((a, b) => (b.score * PRIO_MULT[b.kind]) - (a.score * PRIO_MULT[a.kind]));
         site = candidates[0];
       }
@@ -1006,15 +1038,15 @@
       kabukimon(frame(b, 0, -8 + (T1 - T2), 0), T1, { cap: B.kaya_slab });
       kabukimon(frame(b, 0, -25 + (T2 - T3), 0), T2, { cap: B.kaya_slab });
       kabukimon(frame(b, 0, K3[1], 0), T3, { cap: B.kaya_slab });
-      // ---- 本丸: main hall (the standard inside), watchtower, storehouse
-      {
-        const { f, W, D } = placeRect(b, -8, 1, 2, 7, 0);
-        goten(f, W, D, T1, { m, back: B.kuro_itabari, gw: B.kuro_itabari, loot: 'wajo_palace' });
-        banner(f, ctx, Math.floor(W / 2), T1 + 1, D - 4, 0);
-      }
-      monomi(frame(b, 4, -7, 0), T1, { m });
-      { const { f, W, D } = placeRect(b, 4, 1, 8, 7, 3); kura(f, W, D, T1, { m, low: B.kuro_itabari, wall: B.kuro_itabari, lowH: 4 }); }
-      for (let z = -7 + (T1 - T2); z <= 0; z++) for (let x = -1; x <= 1; x++) b.put(x, T1, z, B.gravel);
+      // ---- 本丸: 三重天守（黒下見板張り・白漆喰帯・瓦葺き・千鳥破風・金の鯱）
+      const t = tenshu(b, ctx, {
+        X0: -6, Z0: -1, X1: 6, Z1: 7, g: T1, n: 3, baseH: 3, m: KAWARA(),
+        wall: B.kuro_itabari, low: B.kuro_itabari, band: B.shikkui, gw: B.kuro_itabari,
+        chidori: [[0, [0, 2]], [1, [1, 3]]]
+      });
+      { const { f, W, D } = placeRect(b, 4, -6, 8, -2, 3); kura(f, W, D, T1, { m, low: B.kuro_itabari, wall: B.kuro_itabari, lowH: 3 }); }
+      for (let z = -7 + (T1 - T2); z <= -2; z++) for (let x = -1; x <= 1; x++) b.put(x, T1, z, B.gravel);
+      b.put(-4, T1 + 1, -5, B.toro); b.put(4, T1 + 1, -5, B.toro);
       // ---- 二の丸: barracks, well; 三の丸: barracks, watchtower, banners
       { const { f, W, D } = placeRect(b, -7, -24, -3, -19, 1); nagaya(f, W, D, T2, { m, low: B.kuro_itabari, band: B.kuro_itabari }); }
       well(b, 5, T2, -15);
@@ -1028,12 +1060,198 @@
       const g2 = ctx.group('ninomaru', b, 0, T2 + 1, -18, 26, 8);
       // (clear of the gate, whose place depends on the drop between the enclosures)
       for (const [x, z, ty] of [[5, -22, 'ashigaru'], [-5, -16, 'samurai'], [6, -19, 'ninja'], [1, -14, 'ashigaru']]) ctx.mob(g2, b, x, T2 + 1, z, ty);
-      const g1 = ctx.group('honmaru', b, 0, T1 + 1, 0, 24, 8);
-      for (const [x, z, ty] of [[-5, -5, 'samurai'], [5, 0, 'samurai'], [-6, -3, 'ninja'], [-5, -1, 'yumi_ashigaru']]) ctx.mob(g1, b, x, T1 + 1, z, ty);
-      ctx.mob(g1, b, 6, T1 + 8, -5, 'yumi_ashigaru');
-      const gh = ctx.group('shuden', b, -3, T1 + 1, 4, 9, 3);
-      for (const [x, z, ty] of [[-5, 3, 'hatamoto'], [-1, 3, 'ninja']]) ctx.mob(gh, b, x, T1 + 1, z, ty);
+      const g1 = ctx.group('honmaru', b, 0, T1 + 1, -3, 24, 8);
+      for (const [x, z, ty] of [[-5, -5, 'samurai'], [5, -5, 'samurai'], [-6, -3, 'ninja'], [-5, -1, 'yumi_ashigaru']]) ctx.mob(g1, b, x, T1 + 1, z, ty);
+      tenshuGarrison(ctx, b, t, [['samurai', 'ashigaru'], ['ninja', 'yumi_ashigaru'], ['hatamoto', 'samurai']]);
       ctx.plan.gate = b.world(0, T3 + 1, K3[1] - 5);
+    },
+
+    // ============================================================ 山城②: 雲海城 (梯郭式・天空高石垣城)
+    yamajiro_unkai(b, ctx, site) {
+      const B = BL(), m = KAWARA(), rnd = ctx.rnd;
+      const T1 = site.fy;
+      const T2 = T1 - 6;
+      const T3 = T2 - 6;
+      const H = [-12, -4, 12, 16];                  // 本丸
+      const N2 = [-26, -34, 18, -10];               // 二の丸
+      const surf = site.snowy ? B.snowy_grass : B.grass;
+
+      // 険しい岩山の削平と高石垣（切岸・急斜面整形）
+      const kuruwa = [[H, T1], [N2, T2]];
+      const EXT = 66;
+      for (let z = -EXT; z <= EXT; z++) for (let x = -EXT; x <= EXT; x++) {
+        const nh = b.nat(x, z);
+        let h = nh, inside = false, dMin = 99;
+        for (const [R, t] of kuruwa) if (rectSd(...R)(x, z) <= 0) { h = t; inside = true; }
+        if (!inside) {
+          const jit = MC.hash2(x, z, 5501) * 1.5;
+          const drop = (d) => Math.round(2 * d + (d > 2 ? (d - 2) * 0.7 + jit : 0));
+          for (const [R, t] of kuruwa) { const d = rectSd(...R)(x, z); dMin = Math.min(dMin, d); if (d <= 12 && h > t + drop(d)) h = t + drop(d); }
+          for (const [R, t] of kuruwa) { const d = rectSd(...R)(x, z); if (h < t - drop(d)) h = t - drop(d); }
+        }
+        if (h !== nh || inside) {
+          const bare = !inside && dMin > 1 && Math.abs(h - nh) > 2;
+          ground(b, x, z, h, bare ? (MC.hash2(x, z, 5503) < 0.25 ? B.gravel : B.stone) : surf, { clear: inside ? 10 : 5 });
+        }
+      }
+
+      // 高石垣テラス（扇の勾配）
+      terrace(b, { box: N2, A: 3, top: T2, base: T3 - 2, sd: rectSd(...N2), surf, corner: corners(...N2) });
+      terrace(b, { box: H, A: 3, top: T1, base: T2 - 2, sd: rectSd(...H), surf, corner: corners(...H) });
+
+      // ---- 二の丸（一段低いテラス）: 枡形門、二の丸御殿、武具長屋、土蔵、井戸
+      const skipN = (x, z) => (z === N2[1] && x >= -22 && x <= -10) || (x >= 12 && z >= -14 && z <= -10);
+      dobei(b, perimeter(...N2).filter(([x, z]) => !skipN(x, z)), T2, { low: B.kirishi });
+      {
+        const f = frame(b, -22, -34, 0);
+        f.fill(1, T2 + 1, 1, 10, T2 + 4, 11, 0);
+        f.fill(1, T2, 1, 10, T2, 11, B.gravel);
+        dobei(f, perimeter(0, 0, 0, 12).concat(perimeter(0, 12, 11, 12)), T2, { low: B.kirishi });
+        koraimon(frame(f, 5, 0, 0), T2, { m });
+        yaguramon(frame(f, 11, 6, 3), T2, { m, wall: B.shikkui });
+      }
+      { const { f, W, D } = placeRect(b, -6, -26, 8, -16, 0); goten(f, W, D, T2, { m, shachi: true, loot: 'wajo_palace' }); }
+      { const { f, W, D } = placeRect(b, -24, -20, -14, -12, 1); nagaya(f, W, D, T2, { m }); }
+      { const { f, W, D } = placeRect(b, 10, -26, 16, -20, 3); kura(f, W, D, T2, { m }); }
+      well(b, 13, T2, -15);
+      for (let z = -32; z <= -12; z++) for (let x = -10; x <= -6; x++) b.put(x, T2, z, B.gravel);
+      for (let x = -6; x <= 0; x++) for (let z = -14; z <= -12; z++) b.put(x, T2, z, B.gravel);
+
+      // 二の丸から本丸へ登る石段と本丸櫓門
+      stepsUp(b, -2, 2, -10, 1, T2, T1 - T2, B.stone_brick_stairs, B.ishigaki, { land: 2, side: B.kirishi });
+      yaguramon(frame(b, 0, -4, 0), T1, { m, wall: B.shikkui });
+
+      // ---- 本丸（山頂テラス）: 白漆喰三重天守、渡り櫓、附櫓、庭園
+      const skipH = (x, z) => (z === H[1] && Math.abs(x) <= 4);
+      dobei(b, perimeter(...H).filter(([x, z]) => !skipH(x, z)), T1, { low: B.kirishi });
+      const t = tenshu(b, ctx, {
+        X0: -5, Z0: 4, X1: 5, Z1: 14, g: T1, n: 3, baseH: 4, m,
+        wall: B.shikkui, low: B.shikkui, band: B.shikkui, gw: B.shikkui,
+        chidori: [[0, [0, 2]], [1, [1, 3]]]
+      });
+      // 渡り櫓と附櫓（本丸東側）
+      {
+        const { f, W, D } = placeRect(b, 5, 7, 10, 11, 1);
+        nagaya(f, W, D, T1, { m, band: B.shikkui });
+      }
+      {
+        const { f, W, D } = placeRect(b, 8, 9, 13, 14, 0);
+        yagura(f, W, D, T1, { m, wall: B.shikkui, n: 2 });
+      }
+      for (let z = -2; z <= 2; z++) for (let x = -1; x <= 1; x++) b.put(x, T1, z, B.gravel);
+      for (const [x, z] of [[-8, -1], [8, -1], [-8, 8]]) b.put(x, T1 + 1, z, B.toro);
+      matsu(b, -8, T1, 3, rnd); matsu(b, -8, T1, 12, rnd);
+
+      // 七曲がり登城石段（大手坂）
+      let rampEnd = -38;
+      for (let k = 1, y = T2; k <= 36; k++) {
+        const z = -34 - k;
+        const nh = b.nat(-17, z);
+        if (y - 1 <= nh) { rampEnd = z; break; }
+        y--;
+        for (let x = -19; x <= -15; x++) {
+          b.put(x, y, z, B.cobblestone_stairs + 0);
+          for (let h = 1; h <= 4; h++) b.put(x, y + h, z, 0);
+        }
+        rampEnd = z - 1;
+      }
+
+      // ---- garrison
+      const g1 = ctx.group('ote', b, -17, T2 + 1, -34, 38, 10);
+      for (const [x, z, ty] of [[-17, -30, 'ashigaru'], [-12, -28, 'samurai'], [-20, -24, 'yumi_ashigaru']]) ctx.mob(g1, b, x, T2 + 1, z, ty);
+      const g2 = ctx.group('ninomaru', b, 0, T2 + 1, -20, 36, 8);
+      for (const [x, z, ty] of [[0, -24, 'samurai'], [-18, -16, 'ashigaru'], [12, -18, 'teppo_ashigaru'], [6, -14, 'yumi_ashigaru']]) ctx.mob(g2, b, x, T2 + 1, z, ty);
+      const g3 = ctx.group('honmaru', b, 0, T1 + 1, 0, 26, 6);
+      for (const [x, z, ty] of [[-3, -1, 'samurai'], [3, -1, 'samurai'], [-6, 6, 'teppo_ashigaru'], [6, 4, 'yumi_ashigaru']]) ctx.mob(g3, b, x, T1 + 1, z, ty);
+      tenshuGarrison(ctx, b, t, [['samurai', 'yumi_ashigaru'], ['samurai', 'teppo_ashigaru'], ['hatamoto', 'samurai']]);
+      ctx.plan.gate = b.world(-17, T2 + 1, rampEnd);
+    },
+
+    // ============================================================ 山城③: 金華城 (輪郭式・孤峰天険城)
+    yamajiro_kinka(b, ctx, site) {
+      const B = BL(), m = KAWARA(), rnd = ctx.rnd;
+      const T1 = site.fy;
+      const T2 = T1 - 7;
+      const H = [-11, -10, 11, 14];                 // 山頂本丸
+      const O = [-28, -34, 28, 28], HO = [-15, -13, 15, 17]; // 同心円帯曲輪（二の丸）
+      const surf = site.snowy ? B.snowy_grass : B.grass;
+
+      // 孤峰山頂の整形と切岸
+      const EXT = 64;
+      for (let z = -EXT; z <= EXT; z++) for (let x = -EXT; x <= EXT; x++) {
+        const nh = b.nat(x, z);
+        const inH = rectSd(...H)(x, z) <= 0;
+        const inO = ringSd(O, HO)(x, z) <= 0;
+        let h = nh;
+        if (inH) h = T1;
+        else if (inO) h = T2;
+        else {
+          const dH = rectSd(...H)(x, z), dO = rectSd(...O)(x, z);
+          if (dH <= 8 && h > T1 + dH * 2) h = T1 + dH * 2;
+          if (dO <= 14 && h > T2 + dO * 1.8) h = T2 + dO * 1.8;
+          if (dO > 0 && h < T2 - dO * 2) h = T2 - dO * 2;
+        }
+        if (h !== nh || inH || inO) {
+          const bare = !inH && !inO && Math.abs(h - nh) > 2;
+          ground(b, x, z, h, bare ? (MC.hash2(x, z, 6602) < 0.25 ? B.gravel : B.stone) : surf, { clear: inH || inO ? 10 : 5 });
+        }
+      }
+
+      // 石垣造成（同心円段）
+      terrace(b, { box: O, A: 3, top: T2, base: T2 - 6, sd: ringSd(O, HO), surf, corner: corners(...O) });
+      terrace(b, { box: H, A: 3, top: T1, base: T2, sd: rectSd(...H), surf, corner: corners(...H) });
+
+      // ---- 二の丸（同心円帯曲輪）: 東西隅櫓、長屋、武器庫、二の丸櫓門
+      const skipN = (x, z) => (z === O[1] && Math.abs(x + 10) <= 6);
+      dobei(b, perimeter(...O).filter(([x, z]) => !skipN(x, z)), T2, { low: B.kuro_itabari });
+      for (const [x0, z0, q] of [[-28, -8, 1], [22, -8, 3]]) {
+        const { f, W, D } = placeRect(b, x0, z0, x0 + 6, z0 + 6, q);
+        yagura(f, W, D, T2, { m, wall: B.kuro_itabari, band: B.shikkui, n: 2 });
+      }
+      yaguramon(frame(b, -10, O[1], 0), T2, { m, wall: B.kuro_itabari, band: B.shikkui, low: B.kuro_itabari, gw: B.kuro_itabari });
+      { const { f, W, D } = placeRect(b, -26, 6, -18, 22, 1); nagaya(f, W, D, T2, { m }); }
+      { const { f, W, D } = placeRect(b, 18, 6, 26, 16, 3); kura(f, W, D, T2, { m, low: B.kuro_itabari, wall: B.kuro_itabari }); }
+      well(b, 20, T2, -18);
+
+      // 二の丸から本丸へ登る石段と本丸櫓門
+      stepsUp(b, -2, 2, -14, 1, T2, T1 - T2, B.stone_brick_stairs, B.ishigaki, { land: 2, side: B.kirishi });
+      yaguramon(frame(b, 0, -10, 0), T1, { m, wall: B.kuro_itabari, band: B.shikkui, low: B.kuro_itabari, gw: B.kuro_itabari });
+
+      // ---- 本丸（最高峰）: 壮麗な四重天守（黒板・白漆喰重層・金の鯱）、庭園
+      const skipH = (x, z) => (z === H[1] && Math.abs(x) <= 4);
+      dobei(b, perimeter(...H).filter(([x, z]) => !skipH(x, z)), T1, { low: B.kuro_itabari });
+      const t = tenshu(b, ctx, {
+        X0: -6, Z0: -2, X1: 6, Z1: 10, g: T1, n: 4, baseH: 4, m,
+        wall: B.kuro_itabari, low: B.kuro_itabari, band: B.shikkui, gw: B.kuro_itabari,
+        chidori: [[0, [1, 3]], [2, [0, 2]]]
+      });
+      for (let z = -9; z <= -3; z++) for (let x = -1; x <= 1; x++) b.put(x, T1, z, B.gravel);
+      for (const [x, z] of [[-8, -6], [8, -6]]) b.put(x, T1 + 1, z, B.toro);
+      matsu(b, -8, T1, 2, rnd); matsu(b, 8, T1, 6, rnd);
+
+      // 九十九折りの急坂石段
+      let rampEnd = O[1] - 4;
+      for (let k = 1, y = T2; k <= 38; k++) {
+        const z = O[1] - k;
+        const nh = b.nat(-10, z);
+        if (y - 1 <= nh) { rampEnd = z; break; }
+        y--;
+        for (let x = -12; x <= -8; x++) {
+          b.put(x, y, z, B.cobblestone_stairs + 0);
+          for (let h = 1; h <= 4; h++) b.put(x, y + h, z, 0);
+        }
+        rampEnd = z - 1;
+      }
+
+      // ---- garrison
+      const g1 = ctx.group('ote', b, -10, T2 + 1, O[1], 36, 10);
+      for (const [x, z, ty] of [[-10, O[1] + 4, 'ashigaru'], [-6, O[1] + 4, 'samurai'], [-14, O[1] + 6, 'teppo_ashigaru']]) ctx.mob(g1, b, x, T2 + 1, z, ty);
+      const g2 = ctx.group('obikuruwa', b, 0, T2 + 1, 0, 42, 8);
+      for (const [x, z, ty] of [[-20, 10, 'samurai'], [20, 10, 'ashigaru'], [-20, -10, 'yumi_ashigaru'], [20, -10, 'teppo_ashigaru']]) ctx.mob(g2, b, x, T2 + 1, z, ty);
+      const g3 = ctx.group('honmaru', b, 0, T1 + 1, -4, 26, 6);
+      for (const [x, z, ty] of [[-3, -5, 'samurai'], [3, -5, 'samurai'], [-8, 2, 'teppo_ashigaru'], [8, 2, 'yumi_ashigaru']]) ctx.mob(g3, b, x, T1 + 1, z, ty);
+      tenshuGarrison(ctx, b, t, [['samurai', 'ashigaru'], ['samurai', 'teppo_ashigaru'], ['ninja', 'samurai'], ['hatamoto', 'samurai']]);
+      ctx.plan.gate = b.world(-10, T2 + 1, rampEnd);
     },
 
     // ============================================================ 海城: the sea as the moat
@@ -1136,6 +1354,204 @@
       for (const [x, z, ty] of [[-2, 8, 'samurai'], [2, 8, 'samurai'], [10, 4, 'teppo_ashigaru'], [-10, 18, 'yumi_ashigaru'], [9, 18, 'ashigaru']]) ctx.mob(g3, b, x, HT + 1, z, ty);
       tenshuGarrison(ctx, b, t, [['samurai', 'teppo_ashigaru'], ['samurai', 'ninja'], ['hatamoto', 'samurai']]);
       ctx.plan.gate = b.world(-21, NT + 1, -44);
+    },
+
+    // ============================================================ 海城②: 浮舟城 (砂州浮城・環水郭城)
+    umijiro_ukifune(b, ctx, site) {
+      const B = BL(), m = KAWARA(), rnd = ctx.rnd;
+      const WL = SEA - 1, MB = SEA - 6;
+      const NT = SEA + 3, HT = NT + 4;
+      const H = [-16, 2, 16, 32];                    // 水上本丸
+      const N2 = [-38, -38, 38, -8];                 // 陸側二の丸
+      const WQ = [-42, -42, 42, 38];                 // 外周水域
+      const G = site.snowy ? B.snowy_grass : B.grass;
+
+      // 潮入り堀の造成（本丸と二の丸を完全に囲む）
+      const sdN = rectSd(N2[0] - 3, N2[1] - 4, N2[2] + 3, N2[3]);
+      apron(b, site, -60, -60, 60, -10, NT, (x, z) => (sdN(x, z) - 1) / 16, (x, z) => sdN(x, z) <= 0 || rectSd(...WQ)(x, z) <= 0);
+      for (let z = N2[1] - 4; z <= N2[3]; z++) for (let x = N2[0] - 3; x <= N2[2] + 3; x++) ground(b, x, z, NT, G);
+
+      // 本丸周囲および二の丸との間の潮入り海水堀
+      for (let z = -8; z <= 36; z++) for (let x = -40; x <= 40; x++) {
+        if (rectSd(...H)(x, z) <= 0) continue;
+        const nh = b.nat(x, z);
+        const bed = Math.min(nh, WL - 3);
+        const dH = rectSd(...H)(x, z);
+        const bedBlock = dH <= 2 ? (rnd() < 0.4 ? B.mossy_cobblestone : B.cobblestone) : (nh <= WL - 4 ? B.gravel : B.sand);
+        moatCol(b, x, z, bed, WL, bedBlock);
+      }
+
+      const water = (y) => (y <= MB ? -1 : y <= WL ? B.water : 0);
+      terrace(b, { box: N2, A: 2, top: NT, base: MB, sd: rectSd(...N2), surf: G, corner: corners(...N2), out: (y, x, z) => (z > N2[3] ? water(y) : -1) });
+      terrace(b, { box: H, A: 3, top: HT, base: MB, sd: rectSd(...H), surf: G, corner: corners(...H), out: water });
+
+      // 雁木（本丸背面の石段船着場）
+      for (let x = -4; x <= 4; x++) for (let k = 0; k <= 3; k++) {
+        b.put(x, HT - k, 32 - k, B.stone_brick_stairs + 2);
+        for (let h = 1; h <= 3; h++) b.put(x, HT - k + h, 32 - k, 0);
+      }
+
+      // ---- 二の丸（陸側城郭）: 枡形門、長屋、米蔵、太鼓橋
+      const skipN = (x, z) => (z === N2[1] && x >= -28 && x <= -14);
+      dobei(b, perimeter(...N2).filter(([x, z]) => !skipN(x, z) && z !== N2[3]), NT, { low: B.namako });
+      dobei(b, perimeter(...N2).filter(([x, z]) => z === N2[3] && Math.abs(x) > 3), NT, { low: B.namako });
+      {
+        const f = frame(b, -28, -38, 0);
+        f.fill(1, NT + 1, 1, 10, NT + 4, 11, 0);
+        f.fill(1, NT, 1, 10, NT, 11, B.gravel);
+        dobei(f, perimeter(0, 0, 0, 12).concat(perimeter(0, 12, 11, 12)), NT, { low: B.namako });
+        koraimon(frame(f, 5, 0, 0), NT, { m });
+        yaguramon(frame(f, 11, 6, 3), NT, { m, wall: B.shikkui, low: B.namako });
+      }
+      { const { f, W, D } = placeRect(b, 6, -34, 28, -28, 2); nagaya(f, W, D, NT, { m, low: B.namako }); }
+      for (const x0 of [-20, -10]) { const { f, W, D } = placeRect(b, x0, -22, x0 + 5, -16, 1); kura(f, W, D, NT, { m }); }
+      well(b, 26, NT, -20);
+      for (let z = -32; z <= -8; z++) for (let x = -2; x <= 2; x++) b.put(x, NT, z, B.gravel);
+      for (let z = -32; z <= -30; z++) for (let x = -14; x <= -2; x++) b.put(x, NT, z, B.gravel);
+
+      // 二の丸から水上本丸へ渡る太鼓橋（木橋＋石段）
+      bridge(b, 0, -8, 1, NT, MB);
+      stepsUp(b, -2, 2, 1, 1, NT, HT - NT, B.stone_brick_stairs, B.ishigaki, { side: B.kirishi });
+      yaguramon(frame(b, 0, 8, 0), HT, { m, wall: B.shikkui, low: B.namako });
+
+      // ---- 水上本丸: 白漆喰瓦葺き三重天守、月見櫓、潮見櫓、本丸御殿
+      const skipH = (x, z) => (z === H[1] && Math.abs(x) <= 6) || (z === H[3] && Math.abs(x) <= 4);
+      dobei(b, perimeter(...H).filter(([x, z]) => !skipH(x, z)), HT, { low: B.namako });
+      for (const [x0, q] of [[-16, 1], [10, 3]]) {
+        const { f, W, D } = placeRect(b, x0, 24, x0 + 6, 30, q);
+        yagura(f, W, D, HT, { m, wall: B.shikkui, low: B.namako, n: 2, shachi: true });
+      }
+      { const { f, W, D } = placeRect(b, -14, 10, -6, 20, 1); goten(f, W, D, HT, { m, loot: 'wajo_palace' }); }
+      const t = tenshu(b, ctx, {
+        X0: -6, Z0: 16, X1: 6, Z1: 26, g: HT, n: 3, baseH: 4, m,
+        wall: B.shikkui, low: B.namako, chidori: [[0, [0, 2]], [1, [1, 3]]]
+      });
+      for (let z = 9; z <= 15; z++) for (let x = -1; x <= 1; x++) b.put(x, HT, z, B.gravel);
+      for (const [x, z] of [[-4, 11], [4, 11]]) b.put(x, HT + 1, z, B.toro);
+      matsu(b, 6, HT, 10, rnd);
+
+      // ---- garrison
+      const g1 = ctx.group('ote', b, -22, NT + 1, -30, 38, 10);
+      for (const [x, z, ty] of [[-22, -30, 'ashigaru'], [-20, -26, 'samurai'], [-12, -32, 'teppo_ashigaru'], [-25, -36, 'yumi_ashigaru']]) ctx.mob(g1, b, x, NT + 1, z, ty);
+      const g2 = ctx.group('ninomaru', b, 12, NT + 1, -26, 36, 10);
+      for (const [x, z, ty] of [[12, -26, 'ashigaru'], [18, -26, 'teppo_ashigaru'], [-4, -16, 'samurai'], [22, -18, 'yumi_ashigaru']]) ctx.mob(g2, b, x, NT + 1, z, ty);
+      const g3 = ctx.group('honmaru', b, 0, HT + 1, 14, 28, 6);
+      for (const [x, z, ty] of [[-3, 11, 'samurai'], [3, 11, 'samurai'], [12, 16, 'teppo_ashigaru'], [-12, 22, 'yumi_ashigaru'], [0, 28, 'ashigaru']]) ctx.mob(g3, b, x, HT + 1, z, ty);
+      tenshuGarrison(ctx, b, t, [['samurai', 'ashigaru'], ['samurai', 'teppo_ashigaru'], ['hatamoto', 'samurai']]);
+      ctx.plan.gate = b.world(-22, NT + 1, -44);
+    },
+
+    // ============================================================ 海城③: 黒潮城 (海食崖・水軍拠点要塞)
+    umijiro_kuroshio(b, ctx, site) {
+      const B = BL(), m = DOGAWARA(), rnd = ctx.rnd;
+      const WL = SEA - 1, MB = SEA - 6;
+      const CT = Math.max(SEA + 12, site.fy);
+      const HT = CT + 3, NT = CT - 3;
+      const H = [-14, 0, 14, 24];                    // 崖上本丸
+      const N2 = [-28, -36, 28, -8];                 // 陸側二の丸
+      const G = site.snowy ? B.snowy_grass : B.grass;
+
+      // 海食崖の急斜面整形：本丸前面および両翼は一気に海面まで切り落とす
+      for (let z = -46; z <= 34; z++) for (let x = -38; x <= 38; x++) {
+        const inH = rectSd(...H)(x, z) <= 0;
+        const inN = rectSd(...N2)(x, z) <= 0;
+        const nh = b.nat(x, z);
+        if (inH) { ground(b, x, z, HT, G); continue; }
+        if (inN) { ground(b, x, z, NT, G); continue; }
+        // 海側（z > 0）は海食断崖
+        if (z >= 0) {
+          const dH = rectSd(...H)(x, z);
+          if (dH <= 4) {
+            const cliffH = Math.max(WL + 1, Math.round(HT - dH * 3.5));
+            ground(b, x, z, cliffH, B.stone);
+          } else {
+            moatCol(b, x, z, Math.min(nh, MB), WL, B.cobblestone);
+          }
+        } else {
+          // 陸側ブレンド
+          const dN = rectSd(...N2)(x, z);
+          if (dN <= 8) {
+            const h = Math.round(NT - dN * 0.8);
+            ground(b, x, z, h, G);
+          }
+        }
+      }
+
+      // 石垣造成
+      terrace(b, { box: N2, A: 2, top: NT, base: NT - 4, sd: rectSd(...N2), surf: G, corner: corners(...N2) });
+      terrace(b, { box: H, A: 3, top: HT, base: NT, sd: rectSd(...H), surf: G, corner: corners(...H) });
+
+      // ---- 二の丸（陸側）: 水軍番所、長屋、武器庫、枡形門
+      const skipN = (x, z) => (z === N2[1] && x >= -22 && x <= -10);
+      dobei(b, perimeter(...N2).filter(([x, z]) => !skipN(x, z) && z !== N2[3]), NT, { low: B.kuro_itabari, cap: B.dogawara_slab });
+      dobei(b, perimeter(...N2).filter(([x, z]) => z === N2[3] && Math.abs(x) > 3), NT, { low: B.kuro_itabari, cap: B.dogawara_slab });
+      {
+        const f = frame(b, -22, -36, 0);
+        f.fill(1, NT + 1, 1, 10, NT + 4, 11, 0);
+        f.fill(1, NT, 1, 10, NT, 11, B.gravel);
+        dobei(f, perimeter(0, 0, 0, 12).concat(perimeter(0, 12, 11, 12)), NT, { low: B.kuro_itabari, cap: B.dogawara_slab });
+        koraimon(frame(f, 5, 0, 0), NT, { m });
+        yaguramon(frame(f, 11, 6, 3), NT, { m, wall: B.kuro_itabari, band: B.shikkui, low: B.kuro_itabari, gw: B.kuro_itabari });
+      }
+      { const { f, W, D } = placeRect(b, 4, -32, 22, -26, 2); nagaya(f, W, D, NT, { m, low: B.kuro_itabari }); }
+      for (const x0 of [-20, -12]) { const { f, W, D } = placeRect(b, x0, -22, x0 + 4, -16, 1); kura(f, W, D, NT, { m, low: B.kuro_itabari, wall: B.kuro_itabari }); }
+      well(b, 20, NT, -18);
+      for (let z = -30; z <= -8; z++) for (let x = -2; x <= 2; x++) b.put(x, NT, z, B.gravel);
+
+      // 二の丸から本丸へ登る石段と本丸櫓門
+      stepsUp(b, -2, 2, -7, 1, NT, HT - NT, B.stone_brick_stairs, B.ishigaki, { side: B.kirishi });
+      yaguramon(frame(b, 0, 0, 0), HT, { m, wall: B.kuro_itabari, band: B.shikkui, low: B.kuro_itabari, gw: B.kuro_itabari });
+
+      // ---- 崖上本丸: 海防三重天守（黒板・銅瓦）、海防角櫓
+      const skipH = (x, z) => (z === H[1] && Math.abs(x) <= 4) || (x >= 8 && z >= 18);
+      dobei(b, perimeter(...H).filter(([x, z]) => !skipH(x, z)), HT, { low: B.kuro_itabari, cap: B.dogawara_slab });
+      {
+        const { f, W, D } = placeRect(b, -14, 16, -8, 22, 1);
+        yagura(f, W, D, HT, { m, wall: B.kuro_itabari, band: B.shikkui, n: 2, shachi: true, gw: B.kuro_itabari });
+      }
+      const t = tenshu(b, ctx, {
+        X0: -5, Z0: 8, X1: 5, Z1: 18, g: HT, n: 3, baseH: 4, m,
+        wall: B.kuro_itabari, low: B.kuro_itabari, band: B.shikkui, gw: B.kuro_itabari,
+        chidori: [[0, [0, 2]], [1, [1, 3]]]
+      });
+      for (let z = 2; z <= 7; z++) for (let x = -1; x <= 1; x++) b.put(x, HT, z, B.gravel);
+      b.put(-4, HT + 1, 4, B.toro); b.put(4, HT + 1, 4, B.toro);
+      matsu(b, -8, HT, 6, rnd);
+
+      // ---- 水の手坂（崖を穿ち海面へ下る秘密の石段と隠し水軍船着場）
+      for (let k = 0; k <= HT - WL; k++) {
+        const sy = HT - k;
+        const sz = 18 + Math.floor(k * 0.7);
+        const sx = 10;
+        b.put(sx, sy, sz, B.stone_brick_stairs + 2);
+        b.put(sx + 1, sy, sz, B.stone_brick_stairs + 2);
+        for (let h = 1; h <= 3; h++) { b.put(sx, sy + h, sz, 0); b.put(sx + 1, sy + h, sz, 0); }
+        b.put(sx - 1, sy + 1, sz, B.kirishi);
+        b.put(sx + 2, sy + 1, sz, B.kirishi);
+      }
+      // 崖下の隠し桟橋
+      const dockZ = 18 + Math.floor((HT - WL) * 0.7);
+      for (let z = dockZ; z <= dockZ + 8; z++) for (let x = 8; x <= 14; x++) {
+        b.put(x, WL + 1, z, B.spruce_slab);
+        for (let h = 1; h <= 3; h++) b.put(x, WL + 1 + h, z, 0);
+        if (z % 3 === 0 && (x === 8 || x === 14)) {
+          b.put(x, WL + 2, z, B.spruce_fence);
+          for (let y = MB; y <= WL; y++) b.put(x, y, z, B.spruce_log);
+        }
+      }
+      b.chest(12, WL + 2, dockZ + 4, 3, 'wajo_armory');
+
+      // ---- garrison
+      const g1 = ctx.group('ote', b, -16, NT + 1, -28, 38, 10);
+      for (const [x, z, ty] of [[-16, -28, 'ashigaru'], [-18, -24, 'samurai'], [-10, -30, 'teppo_ashigaru']]) ctx.mob(g1, b, x, NT + 1, z, ty);
+      const g2 = ctx.group('ninomaru', b, 8, NT + 1, -22, 34, 10);
+      for (const [x, z, ty] of [[10, -24, 'teppo_ashigaru'], [16, -22, 'teppo_ashigaru'], [-6, -14, 'samurai'], [20, -16, 'yumi_ashigaru']]) ctx.mob(g2, b, x, NT + 1, z, ty);
+      const g3 = ctx.group('honmaru', b, 0, HT + 1, 6, 26, 6);
+      for (const [x, z, ty] of [[-2, 4, 'samurai'], [2, 4, 'samurai'], [8, 4, 'teppo_ashigaru'], [-8, 12, 'teppo_ashigaru'], [9, 14, 'ninja']]) ctx.mob(g3, b, x, HT + 1, z, ty);
+      const gd = ctx.group('mizunote', b, 11, WL + 2, dockZ + 4, 18, 4);
+      for (const [x, z, ty] of [[10, dockZ + 2, 'samurai'], [12, dockZ + 5, 'teppo_ashigaru']]) ctx.mob(gd, b, x, WL + 2, z, ty);
+      tenshuGarrison(ctx, b, t, [['samurai', 'teppo_ashigaru'], ['samurai', 'ninja'], ['hatamoto', 'samurai']]);
+      ctx.plan.gate = b.world(-16, NT + 1, -44);
     },
 
     // ============================================================ 砦: square fort, dry moat and earthen rampart
@@ -1254,7 +1670,7 @@
       };
 
       scan(0, rad);
-      if (kinds.some((k) => !best[k])) scan(rad, rad + 12);
+      if (kinds.some((k) => !best[k])) scan(rad, rad + 24);
       return best;
     },
   });

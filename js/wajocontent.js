@@ -100,8 +100,16 @@
     desc: '潮見城の家宝。右クリックで撃つ。一発ごとに火薬を1つ使う' });
   D('murasame', '妖刀「村雨」', { stack: 1, dur: 2800, held: 'tool', legendary: true, tool: { type: SWORD, tier: 4, speed: 1, damage: 12 }, fx: { lifesteal: 2 },
     desc: '朽木砦に封じられていた妖刀。斬るたびに血を吸い、持ち主の傷を癒やす' });
+  D('hakuun_tachi', '宝刀「白雲」', { stack: 1, dur: 3000, held: 'tool', legendary: true, tool: { type: SWORD, tier: 4, speed: 1.15, damage: 11 }, fx: { sweep: 0.8 },
+    desc: '雲海城の家宝。霧を裂く神速の白刃。広い薙ぎ払い斬りを放つ' });
+  D('gumbai_kinka', '軍配「天下布武」', { stack: 1, dur: 2500, held: 'tool', legendary: true, tool: { type: SWORD, tier: 4, speed: 1, damage: 10 }, knock: 2.8,
+    desc: '金華城の家宝。織田信長ゆかりの軍配。強烈な衝撃波で敵を大きく吹き飛ばす' });
+  D('namikiri', '名刀「波切」', { stack: 1, dur: 3200, held: 'tool', legendary: true, tool: { type: SWORD, tier: 4, speed: 1.1, damage: 11 }, fx: { sweep: 0.7 },
+    desc: '浮舟城の家宝。波浪の加護を宿した名刀。敵を薙ぎ払い斬り伏せる' });
+  D('kuroshio_yari', '三叉槍「海龍」', { stack: 1, dur: 2800, held: 'tool', legendary: true, tool: { type: SWORD, tier: 4, speed: 1, damage: 11 }, reach: 2.6, knock: 2.6,
+    desc: '黒潮城の家宝。水軍頭領に伝わる三叉槍。長大な間合いと怒涛の撃退力を持つ' });
   D('wajo_scroll', '和城の絵図', { stack: 1, held: 'item', use: 'wajo_warp',
-    desc: '右クリックで周囲の全5種類の和城（平城・平山城・山城・海城・砦）を探査し、選択した城門前へ転移する' });
+    desc: '右クリックで周囲の全和城（平城・平山城・山城3種・海城3種・砦）を探査し、選択した城門前へ転移する' });
   // props of the castle warriors (not obtainable)
   D('teppo', '火縄銃', { stack: 1, held: 'tool', hidden: true });
   D('ninjato', '忍者刀', { stack: 1, held: 'tool', hidden: true });
@@ -174,7 +182,15 @@
   });
   // rewards dropped by the general's standard when a castle is captured (heirloom per kind of castle)
   MC.WAJO_REWARD = {
-    hirajiro: 'gekko', hirayama: 'kuroito', yamajiro: 'tengu_yari', umijiro: 'tanegashima', toride: 'murasame',
+    hirajiro: 'gekko',
+    hirayama: 'kuroito',
+    yamajiro: 'tengu_yari',
+    yamajiro_unkai: 'hakuun_tachi',
+    yamajiro_kinka: 'gumbai_kinka',
+    umijiro: 'tanegashima',
+    umijiro_ukifune: 'namikiri',
+    umijiro_kuroshio: 'kuroshio_yari',
+    toride: 'murasame',
     common: [['gold_ingot', 6, 10], ['emerald', 6, 12], ['diamond', 2, 4], ['tamahagane', 3, 6], ['life_crystal', 1, 1], ['healing_potion', 2, 3]],
   };
 })();
