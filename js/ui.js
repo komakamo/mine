@@ -22,7 +22,7 @@ MC.SETTINGS_DEF = [
   { key: 'sfxVol', label: '効果音', min: 0, max: 1, step: 0.05, fmt: (v) => Math.round(v * 100) + '%' },
   { key: 'musicVol', label: '音楽', min: 0, max: 1, step: 0.05, fmt: (v) => Math.round(v * 100) + '%' },
   { section: '描画' },
-  { key: 'renderDist', label: '描画距離', min: 4, max: 16, step: 1, fmt: (v) => v + ' チャンク' },
+  { key: 'renderDist', label: '描画距離', min: 4, max: 50, step: 2, fmt: (v) => v + ' チャンク' },
   { key: 'renderScale', label: 'レンダースケール', min: 0.5, max: 1, step: 0.05, fmt: (v) => Math.round(v * 100) + '%' },
   { key: 'fov', label: '視野角', min: 50, max: 110, step: 1, fmt: (v) => v + '°' },
   { key: 'taa', label: 'TAA（テンポラルAA）', type: 'check' },

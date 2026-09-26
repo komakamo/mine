@@ -82,29 +82,66 @@
     tmp.splanes = MC.frustumPlanes(tmp.sMat, tmp.splanes);
 
     // ---------- visible chunk lists
-    const vis = [], shadowList = [];
+    const visPool = this._visPool || (this._visPool = []);
+    const shadowList = this._shadowList || (this._shadowList = []);
+    let visCount = 0, shadowCount = 0;
     let quads = 0;
-    for (const c of world.chunks.values()) {
+
+    const chunkList = world.chunkList && world.chunkList.length === world.chunks.size ? world.chunkList : (world.chunkList = Array.from(world.chunks.values()));
+    const fogCutoff2 = (s.renderDist * 16 * 0.98 + 24) ** 2;
+    const shadowDist2 = (half + 24) * (half + 24);
+
+    for (let i = 0, len = chunkList.length; i < len; i++) {
+      const c = chunkList[i];
       if (!c.gpu) continue;
-      const x0 = c.cx * 16 - camX, z0 = c.cz * 16 - camZ, y0 = -camY, y1 = c.meshMaxY + 1 - camY;
+      const x0 = c.cx * 16 - camX, z0 = c.cz * 16 - camZ;
       const dx = x0 + 8, dz = z0 + 8;
-      if (MC.boxInFrustum(tmp.planes, x0, y0, z0, x0 + 16, y1, z0 + 16)) {
-        vis.push({ c, d: dx * dx + dz * dz });
-        for (const g of c.gpu) if (g) quads += g.quads;
+      const d2 = dx * dx + dz * dz;
+
+      // Distance & Fog culling: skip frustum test and rendering for chunks beyond the fog cutoff
+      if (d2 <= fogCutoff2) {
+        const y0 = -camY, y1 = c.meshMaxY + 1 - camY;
+        if (MC.boxInFrustum(tmp.planes, x0, y0, z0, x0 + 16, y1, z0 + 16)) {
+          if (visCount >= visPool.length) visPool.push({ c: null, d: 0 });
+          const it = visPool[visCount++];
+          it.c = c; it.d = d2;
+          for (const g of c.gpu) if (g) quads += g.quads;
+        }
       }
-      if (dx * dx + dz * dz < (half + 24) * (half + 24) && MC.boxInFrustum(tmp.splanes, x0, y0, z0, x0 + 16, y1, z0 + 16)) shadowList.push({ c });
+
+      if (d2 < shadowDist2) {
+        const y0 = -camY, y1 = c.meshMaxY + 1 - camY;
+        if (MC.boxInFrustum(tmp.splanes, x0, y0, z0, x0 + 16, y1, z0 + 16)) {
+          if (shadowCount >= shadowList.length) shadowList.push({ c: null });
+          shadowList[shadowCount++].c = c;
+        }
+      }
     }
-    vis.sort((a, b) => a.d - b.d);
-    this.stats.drawn = vis.length; this.stats.shadowDrawn = shadowList.length; this.stats.quads = quads;
+    visPool.length = visCount;
+    shadowList.length = shadowCount;
+    visPool.sort((a, b) => a.d - b.d);
+    this.stats.drawn = visCount; this.stats.shadowDrawn = shadowCount; this.stats.quads = quads;
     this.stats.chunks = world.chunks.size;
 
-    const drawLayer = (prog, list, layer) => {
-      for (const it of list) {
-        const c = it.c, g = c.gpu && c.gpu[layer];
-        if (!g) continue;
-        prog.f3('u_chunkOffset', c.cx * 16 - camX, -camY, c.cz * 16 - camZ);
-        gl.bindVertexArray(g.vao);
-        gl.drawElements(gl.TRIANGLES, g.quads * 6, gl.UNSIGNED_INT, 0);
+    const drawLayer = (prog, list, layer, reverse = false) => {
+      const loc = prog._uChunkOffsetLoc !== undefined ? prog._uChunkOffsetLoc : (prog._uChunkOffsetLoc = (prog.u['u_chunkOffset'] || null));
+      const len = list.length;
+      if (!reverse) {
+        for (let i = 0; i < len; i++) {
+          const c = list[i].c, g = c.gpu && c.gpu[layer];
+          if (!g) continue;
+          if (loc) gl.uniform3f(loc, c.cx * 16 - camX, -camY, c.cz * 16 - camZ);
+          gl.bindVertexArray(g.vao);
+          gl.drawElements(gl.TRIANGLES, g.quads * 6, gl.UNSIGNED_INT, 0);
+        }
+      } else {
+        for (let i = len - 1; i >= 0; i--) {
+          const c = list[i].c, g = c.gpu && c.gpu[layer];
+          if (!g) continue;
+          if (loc) gl.uniform3f(loc, c.cx * 16 - camX, -camY, c.cz * 16 - camZ);
+          gl.bindVertexArray(g.vao);
+          gl.drawElements(gl.TRIANGLES, g.quads * 6, gl.UNSIGNED_INT, 0);
+        }
       }
     };
 
@@ -191,7 +228,7 @@
     P.gbuffer.use(); common(P.gbuffer);
     P.gbuffer.m4('u_viewProj', tmp.vp).f1('u_pomDepth', s.pom ? 0.14 : 0)
       .tex('u_texAlbedo', this.texAlbedo).tex('u_texNormal', this.texNormal).tex('u_texSpec', this.texSpec);
-    drawLayer(P.gbuffer, vis, 0);
+    drawLayer(P.gbuffer, visPool, 0);
     if (info.entities && this.entityBatch.n) {
       const E = P.entity.use();
       E.m4('u_viewProj', tmp.vp).tex('u_texAlbedo', this.texAlbedo).tex('u_texNormal', this.texNormal).tex('u_texSpec', this.texSpec);
@@ -241,9 +278,8 @@
       .tex('u_sceneCopy', T.sceneCopy).tex('u_depthCopy', T.depthCopy).tex('u_texAlbedo', this.texAlbedo)
       .tex('u_shadowCmp', this.shadowDepth, this.cmpSampler).tex('u_skyLUT', this.skyLUT)
       .tex('u_noise2D', this.noise2D).tex('u_noise3D', this.noise3D);
-    drawLayer(Wp, vis, 1);
-    const back = vis.slice().reverse();
-    drawLayer(Wp, back, 2);
+    drawLayer(Wp, visPool, 1);
+    drawLayer(Wp, visPool, 2, true);
     if (info.crack && info.crack.stage > 0) {
       const k = info.crack;
       gl.depthFunc(gl.LEQUAL); gl.depthMask(false);

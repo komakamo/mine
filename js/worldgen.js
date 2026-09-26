@@ -9,6 +9,11 @@ MC.WorldGen = class {
     this.nCont = n(1); this.nMount = n(2); this.nRidge = n(3); this.nDetail = n(4);
     this.nTemp = n(5); this.nHum = n(6); this.nCave1 = n(7); this.nCave2 = n(8); this.nCheese = n(9); this.nMisc = n(10);
     this.heights = new Float32Array(18 * 18);
+    this.colBiome = new Uint8Array(256);
+    this.colTemp = new Float32Array(256);
+    this.caveG1 = new Float32Array(25 * 52);
+    this.caveG2 = new Float32Array(25 * 52);
+    this.caveG3 = new Float32Array(25 * 52);
   }
 
   height(x, z) {
@@ -57,7 +62,7 @@ MC.WorldGen = class {
     const hs = this.heights;
     for (let z = -1; z < 17; z++) for (let x = -1; x < 17; x++) hs[(z + 1) * 18 + x + 1] = Math.floor(this.height(x0 + x, z0 + z));
 
-    const colBiome = new Uint8Array(256), colTemp = new Float32Array(256);
+    const colBiome = this.colBiome, colTemp = this.colTemp;
     let maxH = 0;
     for (let z = 0; z < 16; z++) for (let x = 0; x < 16; x++) {
       const wx = x0 + x, wz = z0 + z;
@@ -129,7 +134,7 @@ MC.WorldGen = class {
     const blocks = chunk.blocks;
     const x0 = chunk.cx * 16, z0 = chunk.cz * 16;
     const NY = Math.ceil((maxH + 2) / 4) + 1;
-    const g1 = new Float32Array(25 * NY), g2 = new Float32Array(25 * NY), g3 = new Float32Array(25 * NY);
+    const g1 = this.caveG1, g2 = this.caveG2, g3 = this.caveG3;
     for (let gy = 0; gy < NY; gy++) for (let gz = 0; gz < 5; gz++) for (let gx = 0; gx < 5; gx++) {
       const wx = x0 + gx * 4, wy = gy * 4, wz = z0 + gz * 4, k = (gy * 5 + gz) * 5 + gx;
       g1[k] = this.nCave1.noise3(wx * 0.016, wy * 0.028, wz * 0.016);

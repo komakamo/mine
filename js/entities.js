@@ -1142,7 +1142,7 @@ MC.EntityManager = class {
   render(batch, cam, time) {
     const W = this.world;
     const cx = cam.pos[0], cy = cam.pos[1], cz = cam.pos[2];
-    const maxD = W.renderDist * 16;
+    const maxD = Math.min(W.renderDist * 16, 128);
     for (const e of this.list) {
       const dx = e.pos[0] - cx, dz = e.pos[2] - cz;
       if (dx * dx + dz * dz > maxD * maxD) continue;

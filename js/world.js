@@ -34,12 +34,19 @@ MC.World = class {
     this.gen = new MC.WorldGen(seed);
     this.mesher = new MC.Mesher();
     this.chunks = new Map();
+    this.chunkList = [];
     this.onMesh = null;
     this.onUnload = null;
-    this.renderDist = 8;
+    this._renderDist = 8;
     this.urgent = [];
     this._offsets = null;
     this._offR = -1;
+    this._lastUpdatePcx = -999999;
+    this._lastUpdatePcz = -999999;
+    this._lastUnloadPcx = -999999;
+    this._lastUnloadPcz = -999999;
+    this._lastUnloadTime = 0;
+    this._allMeshed = false;
     this.stats = { generated: 0, meshed: 0 };
     this.edits = new Map();     // chunk key -> Map(local index -> block id)
     this.editsDirty = false;
@@ -53,6 +60,16 @@ MC.World = class {
     this.player = null;
     this.creative = false;
     this.bossesDefeated = new Set();
+  }
+
+  get renderDist() { return this._renderDist; }
+  set renderDist(v) {
+    if (this._renderDist !== v) {
+      this._renderDist = v;
+      this._allMeshed = false;
+      this._offsets = null;
+      this._offR = -1;
+    }
   }
 
   // ---- persistence of player edits (localStorage, per seed)
@@ -123,7 +140,7 @@ MC.World = class {
         if (!n) continue;
         const border = (dx === 0 || (dx === -1 && lx === 0) || (dx === 1 && lx === 15)) &&
                        (dz === 0 || (dz === -1 && lz === 0) || (dz === 1 && lz === 15));
-        if (border || allN) { n.meshed = false; if (flags & MC.SB.NOEDIT) n.simDirty = true; }
+        if (border || allN) { n.meshed = false; if (flags & MC.SB.NOEDIT) n.simDirty = true; this._allMeshed = false; }
       }
     } else {
       // the edited chunk is rebuilt right away; chunks sharing the border too (geometry changes),
@@ -133,8 +150,8 @@ MC.World = class {
         if (!n) continue;
         const border = (dx === 0 || (dx === -1 && lx === 0) || (dx === 1 && lx === 15)) &&
                        (dz === 0 || (dz === -1 && lz === 0) || (dz === 1 && lz === 15));
-        if (border) { if (!this.urgent.includes(n)) this.urgent.push(n); }
-        else n.meshed = false;
+        if (border) { if (!this.urgent.includes(n)) this.urgent.push(n); this._allMeshed = false; }
+        else { n.meshed = false; this._allMeshed = false; }
       }
       this._flushUrgent();
     }
@@ -433,6 +450,8 @@ MC.World = class {
       }
     }
     this.chunks.set(MC.World.key(cx, cz), c);
+    this.chunkList.push(c);
+    this._allMeshed = false;
     this.stats.generated++;
     // spawners
     if (c.spawners) for (const [li, type] of c.spawners) {
@@ -505,49 +524,100 @@ MC.World = class {
   // Streams chunks around (px,pz). Returns number of chunks still missing in view.
   update(px, pz, budgetMs, dirX = 0, dirZ = 0) {
     const t0 = performance.now();
-    const R = this.renderDist;
+    const R = this._renderDist;
     const pcx = Math.floor(px / 16), pcz = Math.floor(pz / 16);
     const offs = this._getOffsets(R);
     const R2 = (R + 0.5) * (R + 0.5), G2 = (R + 1.5) * (R + 1.5);
     let pending = 0;
     this._flushUrgent();
-    for (let pass = 0; pass < 2; pass++) {
-      for (const [dx, dz, d2] of offs) {
-        if (d2 > G2) break;
-        // first pass: chunks in front of the player; second: the rest
-        const front = dx * dirX + dz * dirZ >= -1 || d2 <= 4;
-        if ((pass === 0) !== front) continue;
-        const cx = pcx + dx, cz = pcz + dz;
-        let c = this.getChunk(cx, cz);
-        if (!c) {
-          if (performance.now() - t0 > budgetMs) { pending++; continue; }
-          c = this._generate(cx, cz);
-        }
-        if (d2 <= R2 && !c.meshed) {
-          // simulation-driven changes (flowing fluids...) rebuild at most a few times per second
-          if (c.simDirty && c.gpu && t0 - c.lastMesh < 350 + d2 * 3) continue;
-          if (!this._canMesh(cx, cz)) {
-            let missing = false;
-            for (let oz = -1; oz <= 1 && !missing; oz++) for (let ox = -1; ox <= 1; ox++) {
-              if (!this.getChunk(cx + ox, cz + oz)) {
-                if (performance.now() - t0 > budgetMs) { missing = true; break; }
-                this._generate(cx + ox, cz + oz);
+
+    if (pcx !== this._lastUpdatePcx || pcz !== this._lastUpdatePcz) {
+      this._lastUpdatePcx = pcx;
+      this._lastUpdatePcz = pcz;
+      this._allMeshed = false;
+    }
+
+    if (!this._allMeshed) {
+      let allDone = true;
+      let budgetExceeded = false;
+      outerLoop:
+      for (let pass = 0; pass < 2; pass++) {
+        for (let i = 0, len = offs.length; i < len; i++) {
+          const o = offs[i];
+          const d2 = o[2];
+          if (d2 > G2) break;
+          // first pass: chunks in front of the player; second: the rest
+          const dx = o[0], dz = o[1];
+          const front = dx * dirX + dz * dirZ >= -1 || d2 <= 4;
+          if ((pass === 0) !== front) continue;
+          const cx = pcx + dx, cz = pcz + dz;
+          let c = this.getChunk(cx, cz);
+          if (!c) {
+            c = this._generate(cx, cz);
+            if (performance.now() - t0 > budgetMs) {
+              allDone = false;
+              budgetExceeded = true;
+              pending++;
+              break outerLoop;
+            }
+          }
+          if (d2 <= R2 && !c.meshed) {
+            // simulation-driven changes (flowing fluids...) rebuild at most a few times per second
+            if (c.simDirty && c.gpu && t0 - c.lastMesh < 350 + d2 * 3) {
+              allDone = false;
+              continue;
+            }
+            if (!this._canMesh(cx, cz)) {
+              let missing = false;
+              for (let oz = -1; oz <= 1 && !missing; oz++) for (let ox = -1; ox <= 1; ox++) {
+                if (!this.getChunk(cx + ox, cz + oz)) {
+                  this._generate(cx + ox, cz + oz);
+                  if (performance.now() - t0 > budgetMs) {
+                    missing = true;
+                    break;
+                  }
+                }
+              }
+              if (missing) {
+                allDone = false;
+                budgetExceeded = true;
+                pending++;
+                break outerLoop;
               }
             }
-            if (missing) { pending++; continue; }
+            this._mesh(c);
+            if (performance.now() - t0 > budgetMs) {
+              allDone = false;
+              budgetExceeded = true;
+              pending++;
+              break outerLoop;
+            }
           }
-          if (performance.now() - t0 > budgetMs) { pending++; continue; }
-          this._mesh(c);
         }
       }
+      if (allDone && !budgetExceeded) {
+        this._allMeshed = true;
+      }
     }
-    // unload far chunks
-    const U = R + 3;
-    for (const [k, c] of this.chunks) {
-      if (Math.abs(c.cx - pcx) > U || Math.abs(c.cz - pcz) > U) {
-        if (this.onUnload) this.onUnload(c);
-        this.chunks.delete(k);
-        if (c.spawners) for (const [li] of c.spawners) this.spawners.delete(MC.posKey(c.cx * 16 + (li & 15), li >> 8, c.cz * 16 + ((li >> 4) & 15)));
+
+    // unload far chunks: throttled to chunk boundary crossings or every 2 seconds
+    const now = performance.now();
+    if (pcx !== this._lastUnloadPcx || pcz !== this._lastUnloadPcz || now - this._lastUnloadTime > 2000) {
+      this._lastUnloadPcx = pcx;
+      this._lastUnloadPcz = pcz;
+      this._lastUnloadTime = now;
+      const U = R + 3;
+      let unloadedAny = false;
+      for (const [k, c] of this.chunks) {
+        if (Math.abs(c.cx - pcx) > U || Math.abs(c.cz - pcz) > U) {
+          if (this.onUnload) this.onUnload(c);
+          this.chunks.delete(k);
+          unloadedAny = true;
+          if (c.spawners) for (const [li] of c.spawners) this.spawners.delete(MC.posKey(c.cx * 16 + (li & 15), li >> 8, c.cz * 16 + ((li >> 4) & 15)));
+        }
+      }
+      if (unloadedAny) {
+        this.chunkList = Array.from(this.chunks.values());
       }
     }
     return pending;
