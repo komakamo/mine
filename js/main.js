@@ -304,6 +304,7 @@
     if (e.code === 'F3') { game.showDebug = !game.showDebug; $('debug').classList.toggle('hidden', !game.showDebug); }
     if (e.code === 'F1') { game.hideUI = !game.hideUI; setOverlay(null); }
     if (e.code === 'KeyK') { game.rain = !game.rain; game.ui.refreshSettings(); }
+    if (e.code === 'KeyJ') MC.debug.gotoWajo();
     if (e.code === 'KeyL' && MC.KingdomUI) MC.KingdomUI.key(game);
   });
   document.addEventListener('keyup', (e) => { if (game.player) game.player.keys[e.code] = false; });
