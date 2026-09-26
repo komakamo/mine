@@ -100,6 +100,8 @@
     desc: '潮見城の家宝。右クリックで撃つ。一発ごとに火薬を1つ使う' });
   D('murasame', '妖刀「村雨」', { stack: 1, dur: 2800, held: 'tool', legendary: true, tool: { type: SWORD, tier: 4, speed: 1, damage: 12 }, fx: { lifesteal: 2 },
     desc: '朽木砦に封じられていた妖刀。斬るたびに血を吸い、持ち主の傷を癒やす' });
+  D('wajo_scroll', '和城の絵図', { stack: 1, held: 'item', use: 'wajo_warp',
+    desc: '右クリックで周囲の全5種類の和城（平城・平山城・山城・海城・砦）を探査し、選択した城門前へ転移する' });
   // props of the castle warriors (not obtainable)
   D('teppo', '火縄銃', { stack: 1, held: 'tool', hidden: true });
   D('ninjato', '忍者刀', { stack: 1, held: 'tool', hidden: true });
@@ -107,6 +109,8 @@
 
   // ---------------------------------------------------------------- recipes
   const R = (out, n, ins, station = 'table') => MC.RECIPES.push({ out: [out, n], in: ins, station });
+  R('wajo_scroll', 1, [['paper', 4], ['compass', 1], ['tamahagane', 1]]);
+  R('wajo_scroll', 1, [['paper', 4], ['compass', 1], ['gold_ingot', 1]]);
   R('tamahagane', 1, [['iron_ingot', 2], ['#coal', 2]], 'furnace');
   R('katana', 1, [['tamahagane', 3], ['stick', 1], ['string', 1]]);
   R('yari', 1, [['tamahagane', 1], ['stick', 4]]);
@@ -161,11 +165,11 @@
     ] },
     wajo_palace: { rolls: [3, 6], items: [
       ['paper', 2, 8, 10], ['book', 1, 3, 8], ['emerald', 2, 6, 10], ['gold_ingot', 2, 6, 10], ['diamond', 1, 2, 4], ['healing_potion', 1, 2, 6],
-      ['chochin', 1, 3, 5], ['onigiri', 2, 5, 8], ['golden_apple', 1, 1, 3], ['life_crystal', 1, 1, 1],
+      ['chochin', 1, 3, 5], ['onigiri', 2, 5, 8], ['golden_apple', 1, 1, 3], ['life_crystal', 1, 1, 1], ['wajo_scroll', 1, 1, 6],
     ] },
     wajo_tenshu: { rolls: [5, 8], always: [['healing_potion', 1, 2]], items: [
       ['tamahagane', 2, 6, 12], ['gold_ingot', 3, 9, 12], ['emerald', 3, 8, 12], ['diamond', 1, 3, 8], ['katana', 1, 1, 5], ['gusoku', 1, 1, 4],
-      ['golden_apple', 1, 2, 6], ['life_crystal', 1, 1, 2], ['gold_block', 1, 1, 3], ['shuriken', 4, 12, 6],
+      ['golden_apple', 1, 2, 6], ['life_crystal', 1, 1, 2], ['gold_block', 1, 1, 3], ['shuriken', 4, 12, 6], ['wajo_scroll', 1, 1, 6],
     ] },
   });
   // rewards dropped by the general's standard when a castle is captured (heirloom per kind of castle)

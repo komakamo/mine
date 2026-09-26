@@ -559,6 +559,10 @@ MC.Player = class {
       if (b === B.tnt && it && it.use === 'ignite') { W.setBlock(t.x, t.y, t.z, 0); W.entities.spawnTNT(t.x, t.y, t.z, 4); this.damageHeld(1); return true; }
     }
     // item use
+    if (it && it.use === 'wajo_warp' && first) {
+      if (game.ui) game.ui.openWajoWarp();
+      return true;
+    }
     if (it && it.food && first) {
       const f = it.food;
       if (this.food < 20 || f.always || this.creative) { this.use = { kind: 'eat', t: 0, id, need: 1.6 }; return false; }

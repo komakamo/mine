@@ -1047,6 +1047,32 @@
       }
       return best;
     },
+    // Find the nearest Japanese castle of each of all kinds
+    nearestWajoAll(gen, x, z, rad = 24) {
+      const kinds = Object.keys(TYPES);
+      const best = {};
+      for (const k of kinds) best[k] = null;
+      const gx0 = Math.floor(x / WCELL), gz0 = Math.floor(z / WCELL);
+
+      const scan = (r1, r2) => {
+        for (let gz = gz0 - r2; gz <= gz0 + r2; gz++) {
+          for (let gx = gx0 - r2; gx <= gx0 + r2; gx++) {
+            if (r1 > 0 && Math.abs(gx - gx0) <= r1 && Math.abs(gz - gz0) <= r1) continue;
+            const s = wajoSite(gen, gx, gz);
+            if (!s) continue;
+            const d = Math.hypot(s.x - x, s.z - z);
+            if (!best[s.kind] || d < best[s.kind].dist) {
+              best[s.kind] = { site: s, dist: d };
+            }
+          }
+        }
+      };
+
+      scan(0, rad);
+      if (kinds.some((k) => !best[k])) scan(rad, rad + 12);
+      return best;
+    },
   });
   MC.WorldGen.prototype.nearestWajo = function (x, z, rad, kind) { return Str.nearestWajo(this, x, z, rad, kind); };
+  MC.WorldGen.prototype.nearestWajoAll = function (x, z, rad) { return Str.nearestWajoAll(this, x, z, rad); };
 })();

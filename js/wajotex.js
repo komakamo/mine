@@ -336,4 +336,34 @@
   };
   def('tanegashima', gun({ B: [0x3a3a40, 0.7, 0.6], b: [0x22222a, 0.6, 0.5], W: 0x9a4a1e, r: [0xe8c050, 0.85, 0.85], m: 0x5a3a1a, M: [0xff5010, 0.4, 0.04, 1] }));
   def('teppo', gun({ B: [0x3a3a40, 0.7, 0.6], b: [0x22222a, 0.6, 0.5], W: 0x6a3a1c, r: [0x8a8a90, 0.7, 0.6], m: 0x4a2e16, M: [0xff5010, 0.4, 0.04, 1] }));
+  // 和城の絵図 (wajo_scroll): authentic Japanese castle charter / scroll with wooden spindles,
+  // aged washi parchment, keep silhouette in sumi ink, and vermilion seal
+  def('wajo_scroll', (c) => {
+    const g = grid([
+      '...wggggggggw...',
+      '...wppppppppw...',
+      '..pppppppppppp..',
+      '..pp...ss...pp..',
+      '..pp..ssss..pp..',
+      '..pps.ssss.spp..',
+      '..ppsssssssspp..',
+      '..pp..ssss..pp..',
+      '..ppsssssssspp..',
+      '..ppSSSSSSSSpp..',
+      '..pppppprrpppp..',
+      '..pppprrrrpppp..',
+      '..pppppprrpppp..',
+      '..pppppppppppp..',
+      '...wppppppppw...',
+      '...wggggggggw...',
+    ]);
+    render(c, g, {
+      w: [0x321e12, 0.45, 0.05],
+      g: [0xe6b840, 0.85, 0.8],
+      p: [0xf6f0de, 0.35, 0.04],
+      s: [0x222026, 0.75, 0.4],
+      S: [0x4a4650, 0.65, 0.4],
+      r: [0xcc2820, 0.6, 0.15],
+    }, 0x140e08);
+  });
 })();

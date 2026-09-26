@@ -304,7 +304,7 @@
     if (e.code === 'F3') { game.showDebug = !game.showDebug; $('debug').classList.toggle('hidden', !game.showDebug); }
     if (e.code === 'F1') { game.hideUI = !game.hideUI; setOverlay(null); }
     if (e.code === 'KeyK') { game.rain = !game.rain; game.ui.refreshSettings(); }
-    if (e.code === 'KeyJ') MC.debug.gotoWajo();
+    if (e.code === 'KeyJ') { if (game.ui) game.ui.openWajoWarp(); }
     if (e.code === 'KeyL' && MC.KingdomUI) MC.KingdomUI.key(game);
   });
   document.addEventListener('keyup', (e) => { if (game.player) game.player.keys[e.code] = false; });
@@ -573,16 +573,23 @@
       }
       return out.sort((a, b) => a.dist - b.dist);
     },
-    // teleport in front of the main gate of the nearest Japanese castle (of a kind)
-    gotoWajo(kind, rad = 10) {
+    // teleport in front of the main gate of the nearest Japanese castle (of a kind), or open selection UI
+    gotoWajo(kind, rad = 24) {
+      if (!kind) {
+        if (game.ui) game.ui.openWajoWarp();
+        return null;
+      }
       const p = game.player, s = game.world.gen.nearestWajo(p.pos[0], p.pos[2], rad, kind);
-      if (!s) return null;
-      const plan = MC.Structures.wajoPlan(game.world.gen, s);
-      const g = plan.gate || [s.x, s.fy + 1, s.z];
-      p.pos = [g[0] + 0.5, g[1] + 1, g[2] + 0.5];
-      p.vel = [0, 0, 0]; p.fallY = p.pos[1];
-      p.yaw = Math.atan2(s.x - g[0], -(s.z - g[2]));
-      return { site: s, gate: g, banner: plan.banner };
+      if (!s) {
+        if (game.ui) game.ui.toast(`${MC.WAJO_TYPES[kind] ? MC.WAJO_TYPES[kind].kind : kind}が見つかりませんでした`);
+        return null;
+      }
+      return MC.warpToWajo ? MC.warpToWajo(game, s) : null;
+    },
+    giveWajoScroll() {
+      const p = game.player;
+      p.inv.add(MC.makeStack(MC.idOf('wajo_scroll'), 1));
+      if (game.ui) game.ui.updateHotbar();
     },
     // break the standard of the nearest Japanese castle (capture test)
     seizeWajo() {
